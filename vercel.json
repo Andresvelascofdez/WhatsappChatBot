@@ -1,8 +1,14 @@
 {
-  "functions": ["packages/api/src/app.ts"],
-  "rewrites": [
-    { "source": "/api/(.*)", "function": "packages/api/src/app" },
-    { "source": "/webhook", "function": "packages/api/src/app" },
-    { "source": "/health", "function": "packages/api/src/app" }
+  "version": 2,
+  "builds": [
+    {
+      "src": "packages/api/src/app.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/packages/api/src/app.ts" },
+    { "src": "/webhook", "dest": "/packages/api/src/app.ts" },
+    { "src": "/health", "dest": "/packages/api/src/app.ts" }
   ]
 }

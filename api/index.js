@@ -48,5 +48,7 @@ app.post('/webhook', async (c) => {
   }
 });
 
-// Export for Vercel
-module.exports = app.fetch.bind(app);
+// Export handler function for Vercel
+module.exports = async (req, res) => {
+  return app.fetch(req, res);
+};

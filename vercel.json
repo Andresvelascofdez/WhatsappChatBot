@@ -3,16 +3,11 @@
   "installCommand": "pnpm install --frozen-lockfile=false",
   "builds": [
     {
-      "src": "packages/api/src/app.ts",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "packages/**"
-        ]
-      }
+      "src": "api/index.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "/packages/api/src/app.ts" }
+    { "src": "/(.*)", "dest": "/api/index.js" }
   ]
 }

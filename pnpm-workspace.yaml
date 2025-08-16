@@ -1,5 +1,9 @@
 lockfileVersion: '6.0'
 
+packages:
+  - 'packages/*'
+  - 'packages/lib/*'
+
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false

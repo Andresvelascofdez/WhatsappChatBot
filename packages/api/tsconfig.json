@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "noEmit": false,
+    "composite": true
+  },
+  "references": [
+    { "path": "../lib/db" },
+    { "path": "../lib/wa" },
+    { "path": "../lib/gcal" },
+    { "path": "../lib/booking" }
+  ],
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}

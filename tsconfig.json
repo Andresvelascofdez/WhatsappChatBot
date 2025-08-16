@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "ES2022",
+    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "allowJs": true,
@@ -17,6 +17,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "composite": true,
     "baseUrl": ".",
     "paths": {
       "@chatbot/booking": ["./packages/lib/booking/src"],
@@ -25,9 +26,14 @@
       "@chatbot/db": ["./packages/lib/db/src"]
     }
   },
-  "include": [
-    "packages/**/*"
+  "references": [
+    { "path": "./packages/lib/db" },
+    { "path": "./packages/lib/wa" },
+    { "path": "./packages/lib/gcal" },
+    { "path": "./packages/lib/booking" },
+    { "path": "./packages/api" }
   ],
+  "include": [],
   "exclude": [
     "node_modules",
     "dist",

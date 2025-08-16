@@ -56,15 +56,18 @@ importers:
       '@chatbot/wa':
         specifier: workspace:*
         version: link:../lib/wa
+      '@hono/node-server':
+        specifier: ^1.8.2
+        version: 1.18.2(hono@4.9.2)
       '@hono/zod-validator':
         specifier: ^0.7.2
-        version: 0.7.2(hono@3.12.12)(zod@3.25.76)
+        version: 0.7.2(hono@4.9.2)(zod@3.25.76)
       express:
         specifier: ^5.1.0
         version: 5.1.0
       hono:
-        specifier: ^3.12.0
-        version: 3.12.12
+        specifier: ^4.0.0
+        version: 4.9.2
       twilio:
         specifier: ^4.19.3
         version: 4.23.0
@@ -1016,13 +1019,22 @@ packages:
     engines: {node: '>=14'}
     dev: true
 
-  /@hono/zod-validator@0.7.2(hono@3.12.12)(zod@3.25.76):
+  /@hono/node-server@1.18.2(hono@4.9.2):
+    resolution: {integrity: sha512-icgNvC0vRYivzyuSSaUv9ttcwtN8fDyd1k3AOIBDJgYd84tXRZSS6na8X54CY/oYoFTNhEmZraW/Rb9XYwX4KA==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
+    dependencies:
+      hono: 4.9.2
+    dev: false
+
+  /@hono/zod-validator@0.7.2(hono@4.9.2)(zod@3.25.76):
     resolution: {integrity: sha512-ub5eL/NeZ4eLZawu78JpW/J+dugDAYhwqUIdp9KYScI6PZECij4Hx4UsrthlEUutqDDhPwRI0MscUfNkvn/mqQ==}
     peerDependencies:
       hono: '>=3.9.0'
       zod: ^3.25.0 || ^4.0.0
     dependencies:
-      hono: 3.12.12
+      hono: 4.9.2
       zod: 3.25.76
     dev: false
 
@@ -3664,9 +3676,9 @@ packages:
       function-bind: 1.1.2
     dev: false
 
-  /hono@3.12.12:
-    resolution: {integrity: sha512-5IAMJOXfpA5nT+K0MNjClchzz0IhBHs2Szl7WFAhrFOsbtQsYmNynFyJRg/a3IPsmCfxcrf8txUGiNShXpK5Rg==}
-    engines: {node: '>=16.0.0'}
+  /hono@4.9.2:
+    resolution: {integrity: sha512-UG2jXGS/gkLH42l/1uROnwXpkjvvxkl3kpopL3LBo27NuaDPI6xHNfuUSilIHcrBkPfl4y0z6y2ByI455TjNRw==}
+    engines: {node: '>=16.9.0'}
     dev: false
 
   /http-errors@1.4.0:

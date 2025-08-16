@@ -23,7 +23,8 @@
     "@chatbot/wa": "workspace:*",
     "@hono/zod-validator": "^0.7.2",
     "express": "^5.1.0",
-    "hono": "^3.12.0",
+    "hono": "^4.0.0",
+    "@hono/node-server": "^1.8.2",
     "twilio": "^4.19.3",
     "zod": "^3.22.4"
   },

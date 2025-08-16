@@ -9,11 +9,19 @@ export const EnvConfigSchema = z.object({
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   
-  // WhatsApp Cloud API (Meta) - Mucho más barato
-  WHATSAPP_PROVIDER: z.enum(['cloud', '360dialog', 'ultramsg']).default('cloud'),
+  // WhatsApp API - Múltiples proveedores soportados
+  WHATSAPP_PROVIDER: z.enum(['twilio', 'cloud', '360dialog', 'ultramsg']).default('twilio'),
+  
+  // Twilio WhatsApp API (pago por mensaje, sin perfil comercial Facebook)
+  TWILIO_ACCOUNT_SID: z.string().min(1).optional(),
+  TWILIO_AUTH_TOKEN: z.string().min(1).optional(),
+  TWILIO_WHATSAPP_NUMBER: z.string().min(1).optional(),
+  
+  // WhatsApp Cloud API (Meta) - Más barato pero requiere perfil comercial
   WHATSAPP_CLOUD_ACCESS_TOKEN: z.string().min(1).optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().min(1).optional(),
-  // Backward compatibility with 360dialog
+  
+  // Legacy APIs (más caros)
   WHATSAPP_API_URL: z.string().url().default('https://graph.facebook.com/v17.0'),
   WHATSAPP_API_KEY: z.string().min(1).optional(),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().min(1),
@@ -97,6 +105,10 @@ export function createAppConfig(): AppConfig {
     whatsapp: {
       provider: env.WHATSAPP_PROVIDER,
       apiUrl: env.WHATSAPP_API_URL,
+      // Twilio config
+      twilioAccountSid: env.TWILIO_ACCOUNT_SID,
+      twilioAuthToken: env.TWILIO_AUTH_TOKEN,
+      twilioWhatsAppNumber: env.TWILIO_WHATSAPP_NUMBER,
       // Cloud API config
       cloudAccessToken: env.WHATSAPP_CLOUD_ACCESS_TOKEN,
       phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID,

@@ -1,6 +1,6 @@
 /**
  * Cliente WhatsApp multi-proveedor optimizado para costos
- * Soporta: Cloud API (Meta), 360dialog, Ultramsg
+ * Soporta: Twilio, Cloud API (Meta), 360dialog, Ultramsg
  */
 
 export interface WhatsAppMessage {
@@ -12,8 +12,12 @@ export interface WhatsAppMessage {
 }
 
 export interface WhatsAppConfig {
-  provider: 'cloud' | '360dialog' | 'ultramsg';
-  apiUrl: string;
+  provider: 'twilio' | 'cloud' | '360dialog' | 'ultramsg';
+  apiUrl?: string;
+  // Twilio - Pago por mensaje, sin perfil comercial Facebook
+  twilioAccountSid?: string;
+  twilioAuthToken?: string;
+  twilioWhatsAppNumber?: string;
   // Cloud API (Meta) - La más barata
   cloudAccessToken?: string;
   phoneNumberId?: string;
@@ -33,6 +37,8 @@ export class WhatsAppClient {
    */
   async sendMessage(message: WhatsAppMessage): Promise<void> {
     switch (this.config.provider) {
+      case 'twilio':
+        return this.sendTwilioMessage(message);
       case 'cloud':
         return this.sendCloudMessage(message);
       case '360dialog':
@@ -41,6 +47,33 @@ export class WhatsAppClient {
         return this.sendUltramsgMessage(message);
       default:
         throw new Error(`Proveedor no soportado: ${this.config.provider}`);
+    }
+  }
+
+  /**
+   * Twilio WhatsApp API - Pago por mensaje (~$0.005-0.01)
+   * Sin perfil comercial de Facebook requerido
+   */
+  private async sendTwilioMessage(message: WhatsAppMessage): Promise<void> {
+    if (!this.config.twilioAccountSid || !this.config.twilioAuthToken || !this.config.twilioWhatsAppNumber) {
+      throw new Error('Credenciales de Twilio faltantes');
+    }
+
+    // Importar Twilio dinámicamente para evitar errores en edge runtime
+    const { default: twilio } = await import('twilio');
+    const client = twilio(this.config.twilioAccountSid, this.config.twilioAuthToken);
+
+    try {
+      const response = await client.messages.create({
+        from: this.config.twilioWhatsAppNumber,
+        to: `whatsapp:${message.to}`,
+        body: message.text.body,
+      });
+
+      console.log(`✅ Mensaje Twilio enviado: ${response.sid}`);
+    } catch (error) {
+      console.error('❌ Error enviando mensaje Twilio:', error);
+      throw new Error(`Error Twilio: ${error}`);
     }
   }
 

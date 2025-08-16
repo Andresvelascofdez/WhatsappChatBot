@@ -3,11 +3,11 @@
   "installCommand": "pnpm install --frozen-lockfile=false",
   "builds": [
     {
-      "src": "api/test.js",
+      "src": "api/chatbot.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "/api/test.js" }
+    { "src": "/(.*)", "dest": "/api/chatbot.js" }
   ]
 }

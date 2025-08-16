@@ -56,6 +56,9 @@ importers:
       '@chatbot/wa':
         specifier: workspace:*
         version: link:../lib/wa
+      '@hono/zod-validator':
+        specifier: ^0.7.2
+        version: 0.7.2(hono@3.12.12)(zod@3.25.76)
       express:
         specifier: ^5.1.0
         version: 5.1.0
@@ -1009,6 +1012,16 @@ packages:
     resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
     engines: {node: '>=14'}
     dev: true
+
+  /@hono/zod-validator@0.7.2(hono@3.12.12)(zod@3.25.76):
+    resolution: {integrity: sha512-ub5eL/NeZ4eLZawu78JpW/J+dugDAYhwqUIdp9KYScI6PZECij4Hx4UsrthlEUutqDDhPwRI0MscUfNkvn/mqQ==}
+    peerDependencies:
+      hono: '>=3.9.0'
+      zod: ^3.25.0 || ^4.0.0
+    dependencies:
+      hono: 3.12.12
+      zod: 3.25.76
+    dev: false
 
   /@humanwhocodes/config-array@0.13.0:
     resolution: {integrity: sha512-DZLEEqFWQFiyK6h5YIeynKx7JlvCYWL0cImfSRXZ9l4Sg2efkFGTuFf6vzXjK1cq6IYkU+Eg/JizXw+TD2vRNw==}

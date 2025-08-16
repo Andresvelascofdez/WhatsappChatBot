@@ -1,0 +1,8 @@
+{
+  "functions": ["packages/api/src/app.ts"],
+  "rewrites": [
+    { "source": "/api/(.*)", "function": "packages/api/src/app" },
+    { "source": "/webhook", "function": "packages/api/src/app" },
+    { "source": "/health", "function": "packages/api/src/app" }
+  ]
+}

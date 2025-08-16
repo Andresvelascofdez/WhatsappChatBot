@@ -14,6 +14,7 @@ import { GoogleCalendarClient } from '@chatbot/gcal';
 import { BookingService } from '@chatbot/booking';
 import { createAppConfig, AppConfig } from './config';
 import { createMessageHandler } from './handlers';
+import { createBookingAPI } from './booking-api';
 
 /**
  * WhatsApp webhook verification schema
@@ -78,6 +79,9 @@ export function createWebhookHandler(config: AppConfig) {
   );
 
   const messageHandler = createMessageHandler(bookingService, config);
+
+  // Mount booking API routes
+  app.route('/api', createBookingAPI(bookingService, config));
 
   // Webhook verification (GET)
   app.get('/webhook', async (c) => {

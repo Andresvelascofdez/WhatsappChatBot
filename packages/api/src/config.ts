@@ -9,9 +9,13 @@ export const EnvConfigSchema = z.object({
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   
-  // WhatsApp Business API (360dialog)
-  WHATSAPP_API_URL: z.string().url().default('https://waba-v2.360dialog.io'),
-  WHATSAPP_API_KEY: z.string().min(1),
+  // WhatsApp Cloud API (Meta) - Mucho más barato
+  WHATSAPP_PROVIDER: z.enum(['cloud', '360dialog', 'ultramsg']).default('cloud'),
+  WHATSAPP_CLOUD_ACCESS_TOKEN: z.string().min(1).optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().min(1).optional(),
+  // Backward compatibility with 360dialog
+  WHATSAPP_API_URL: z.string().url().default('https://graph.facebook.com/v17.0'),
+  WHATSAPP_API_KEY: z.string().min(1).optional(),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().min(1),
   
   // Google Calendar API
@@ -57,7 +61,12 @@ export interface AppConfig {
     serviceRoleKey: string;
   };
   whatsapp: {
+    provider: 'cloud' | '360dialog' | 'ultramsg';
     apiUrl: string;
+    // Cloud API (Meta) - Recomendado para multi-cliente
+    cloudAccessToken?: string;
+    phoneNumberId?: string;
+    // Legacy APIs
     apiKey: string;
     webhookVerifyToken: string;
   };
@@ -86,8 +95,13 @@ export function createAppConfig(): AppConfig {
       serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
     },
     whatsapp: {
+      provider: env.WHATSAPP_PROVIDER,
       apiUrl: env.WHATSAPP_API_URL,
-      apiKey: env.WHATSAPP_API_KEY,
+      // Cloud API config
+      cloudAccessToken: env.WHATSAPP_CLOUD_ACCESS_TOKEN,
+      phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID,
+      // Legacy API config (360dialog, ultramsg)
+      apiKey: env.WHATSAPP_API_KEY || '',
       webhookVerifyToken: env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
     },
     google: {

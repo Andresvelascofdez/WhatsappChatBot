@@ -1,0 +1,347 @@
+Objetivo y alcance
+
+Chatbot de WhatsApp que:
+
+Gestione reservas con oferta de slots según disponibilidad real.
+
+Soporte cancelaciones y reprogramaciones.
+
+Responda FAQs (precios, servicios, dirección, horario).
+
+Multi-cliente (multi-tenant) con configuración por negocio (servicios, duración, buffers, horarios, idioma, FAQs).
+
+Sin web obligatoria; usa Google Calendar como fuente de ocupación y Supabase (Postgres) como BBDD.
+
+Integración con WhatsApp Business API (preferencia: 360dialog; alternativa: Twilio).
+
+Diseño preparado para escalar a bares, estudios de tatuaje, manicura (cambia solo tenant_config).
+
+Arquitectura
+
+Canal: WhatsApp Business API → Webhook HTTP (serverless).
+
+Backend: Cloudflare Workers o Vercel Functions (Node/TypeScript).
+
+BBDD: Supabase (Postgres) con Row Level Security por tenant_id.
+
+Agenda: Google Calendar API (un calendario por negocio).
+
+Opcional/Después: Instagram DM (adaptador de canal), pagos por link (Stripe), recordatorios automáticos.
+
+Observabilidad: logs estructurados + trazabilidad por tenant_id + métricas de uso.
+
+Requisitos funcionales
+
+Reservas:
+
+Selección de servicio (duración + precio + buffer opcional + granularidad del slot).
+
+Selección de día y propuesta de 3–5 slots próximos (ej.: 10:00, 10:30, 11:00).
+
+Hold del slot durante X min (p.ej. 5) → confirmación → evento en Calendar.
+
+Evitar dobles reservas con índice único/exclusión.
+
+Cancelaciones/Reprogramaciones:
+
+Identificación por ID de cita o heurística (teléfono + fecha/hora).
+
+Eliminación/actualización en Calendar + actualización en BBDD.
+
+FAQs:
+
+Respuestas estáticas por clave (precios/servicios/dirección/horario).
+
+Opcional: capas IA con “contexto FAQ” definido por tenant.
+
+Recordatorios (opcional fase 2):
+
+WhatsApp 24 h y/o 2 h antes (plantillas), con enlace para gestionar cambios.
+
+Internacionalización/zonas horarias:
+
+Almacenar UTC; mostrar en tenant.tz (ej. Europe/Nicosia).
+
+Textos por idioma en tenant_config.
+
+Flujos conversacionales (resumen)
+
+Bienvenida:
+
+“1) Reservar 2) Cancelar 3) Precios/Servicios 4) Dirección/Horario”.
+
+Reservar:
+
+Preguntar servicio → día → listar 3–5 slots → usuario elige → hold → “Escribe CONFIRMAR” → confirmar → evento + mensaje de confirmación con ID.
+
+Cancelar:
+
+Pedir ID → validar → borrar en Calendar → marcar cancelled → confirmar por WhatsApp.
+
+Reprogramar (si se incluye):
+
+Identificar cita → ofrecer nuevos slots → confirmar y update en Calendar.
+
+Fallback:
+
+Reenviar menú principal; derivar a agente humano (opcional).
+
+Modelo de datos (Postgres/Supabase)
+
+tenants (id, name, tz, phone_masked, locale, active, created_at).
+
+services (id, tenant_id, name, duration_min, price_cents, slot_granularity_min=30, buffer_min=0, is_active).
+
+customers (id, tenant_id, name, whatsapp, created_at, unique(tenant_id, whatsapp)).
+
+appointments (id, tenant_id, customer_id, service_id, start_ts, end_ts, status ∈ {pending, confirmed, cancelled, expired}, gcal_event_id, created_at, expires_at).
+
+faqs (id, tenant_id, key ∈ {prices, services, address, hours, custom:*}, content_text).
+
+channels (id, tenant_id, type ∈ {whatsapp, instagram}, provider, business_number, page_id/ig_user_id, webhook_secret, is_live).
+
+message_logs (id, tenant_id, customer_id, direction ∈ {in,out}, template_name, payload_json, ts).
+
+Índices:
+
+unique(tenant_id, start_ts) en appointments filtrado por status in ('pending','confirmed') (bloqueo por inicio exacto).
+
+(Avanzado) Índice de exclusión (btree_gist) para evitar solapes reales tsrange(start_ts, end_ts) si se permiten servicios de distinta duración.
+
+Seguridad:
+
+RLS por tenant_id en todas las tablas; roles service_role sólo en backend.
+
+Integración WhatsApp API
+
+Proveedor preferente: 360dialog (menor coste).
+
+Webhook:
+
+Verificación GET (hub.mode, hub.verify_token, hub.challenge).
+
+Recepción POST (mensajes entrantes, plantillas, estados).
+
+Envío:
+
+Mensajes de sesión (<24 h) → texto normal.
+
+Mensajes fuera de ventana → templates preaprobados (ej. confirmación, recordatorios).
+
+Plantillas recomendadas:
+
+confirmacion_cita: “✅ Tu cita {date} {time} para {service} está confirmada. ID {id}.”
+
+recordatorio_24h: “⏰ Recordatorio: cita mañana {time}. Responde ‘cancelar {id}’ si no puedes venir.”
+
+cancelacion_ok: “❌ Cita {id} cancelada. ¿Quieres reservar otra? Escribe ‘reservar’.”
+
+Control de estado de conversaciones (por categoría) para no incurrir en cobros inesperados.
+
+Integración Google Calendar
+
+Credenciales: Service Account; compartir cada calendario de tenant con ese SA.
+
+Lectura ocupación:
+
+freebusy.query o events.list para intervalo [apertura, cierre] del día.
+
+Escritura:
+
+events.insert al confirmar la cita; guardar gcal_event_id.
+
+events.delete al cancelar; events.patch al reprogramar.
+
+Normalización horario:
+
+Horario laboral por tenant (ej. bloques 10–14 / 16–20; cierres por festivos).
+
+Generación de rejilla en slot_granularity_min + buffer_min.
+
+Lógica de disponibilidad y concurrencia
+
+Generar slots candidatos para un día con:
+
+Horario de apertura + descansos.
+
+Granularidad + duración + buffer del servicio.
+
+Marcar ocupados si:
+
+Hay eventos en Calendar que solapan.
+
+Hay appointments pending/confirmed que bloquean el inicio (o el rango si usamos exclusión).
+
+Concurrencia:
+
+INSERT de pending (con expires_at = now()+interval '5 min'), protegido por índice; si falla → ofrecer siguiente slot.
+
+UPDATE → confirmed dentro de transacción + crear evento Calendar; si Calendar falla → rollback o retry idempotente.
+
+Expiración de holds:
+
+Cron (Workers Scheduled/Vercel Cron) cada minuto/5 min:
+
+UPDATE appointments SET status='expired' WHERE status='pending' AND expires_at < now().
+
+Endoints backend (mínimos)
+
+POST /webhook/whatsapp (público):
+
+Verificación GET.
+
+Procesa mensajes entrantes → router por intención (regex/keywords).
+
+POST /availability (privado):
+
+Body: { tenant_id, service_id, dayISO } → devuelve array de slots.
+
+POST /hold (privado):
+
+{ tenant_id, customer_id, service_id, startISO } → pending | conflict.
+
+POST /confirm (privado):
+
+{ tenant_id, customer_id } (último pending activo) → confirma + crea evento + retorna id.
+
+POST /cancel (privado):
+
+{ tenant_id, appointment_id } → cancela + borra evento.
+
+Idempotencia:
+
+Cabecera Idempotency-Key en confirm/cancel.
+
+Reintentos con backoff.
+
+Gestión de intenciones (NLU sencillo, sin coste IA)
+
+Regex/keywords multilenguaje:
+
+reservar|cita|book|appointment
+
+cancelar|cancel|anular
+
+precios|tarifas|prices
+
+servicios|services
+
+direccion|address|ubicacion|location
+
+horario|hours|opening
+
+Mantenible por tenant (lista de sinónimos en tenant_config).
+
+Configuración por tenant
+
+tenant_config (JSON en BBDD):
+
+working_hours por día (intervalos).
+
+services_default_order.
+
+tz, locale, currency.
+
+faqs overrides.
+
+Textos de menú y plantillas (permite personalizar tono/emoji).
+
+Migraciones: seed inicial por tenant + admin script CLI.
+
+Seguridad y cumplimiento
+
+Datos mínimos: nombre + número + cita. Nada sensible.
+
+Consentimiento: primera respuesta automática con aviso (“Responde STOP para no recibir recordatorios”).
+
+RLS por tenant_id; secret management vía variables de entorno.
+
+Retención: anonimizar o borrar citas > 12 meses (configurable).
+
+Exportabilidad: endpoint para CSV por tenant (citas, clientes).
+
+Auditoría: message_logs y cambios de estado con marca temporal.
+
+Operación y SRE
+
+Logs estructurados (JSON) con tenant_id, customer_id, appt_id.
+
+Alertas:
+
+Fallos en creación/actualización de Calendar.
+
+Tasa de errores webhook > umbral.
+
+Dashboards básicos:
+
+Citas por día/servicio/tenant.
+
+Ratio holds→confirm.
+
+Conversaciones por categoría WhatsApp (coste).
+
+Pruebas (QA)
+
+Unitarias:
+
+Generación de slots (bordes: aperturas, buffers, festivos).
+
+Conflictos concurrentes (índice/hold).
+
+Integración:
+
+Webhook WhatsApp → intent router → hold/confirm → Calendar.
+
+E2E (staging):
+
+Flujo completo reservar/cancelar con calendario de prueba.
+
+Datos falsos:
+
+Seeds por tenant demo; simulación de ocupación en Calendar.
+
+Despliegue
+
+Infra: mono-repo (pnpm) con paquetes api/, lib/booking, lib/gcal, lib/wa, lib/db.
+
+Entornos: dev (staging), prod.
+
+CI/CD: lint + test + deploy preview.
+
+Variables de entorno (por entorno):
+
+SUPABASE_URL, SUPABASE_SERVICE_ROLE
+
+WHATSAPP_VERIFY_TOKEN, WHATSAPP_TOKEN, WHATSAPP_API_URL
+
+GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_CALENDAR_ID
+
+TZ_DEFAULT, LOG_LEVEL
+
+Backups: snapshots diarios de BBDD (Supabase).
+
+Roadmap incremental
+
+Fase 1 (MVP): WhatsApp, servicios fijos, slots 30’, holds 5’, confirm/cancel, FAQs estáticas, sin pagos, sin UI admin (seed por SQL).
+
+Fase 2: Recordatorios 24 h/2 h, reprogramar, buffers por servicio, festivos específicos.
+
+Fase 3: Panel básico admin (Supabase Auth + Next.js ligero) para que el negocio edite horarios/FAQs.
+
+Fase 4: Adaptador Instagram DM, pagos por link (Stripe), staff/empleados por servicio.
+
+Fase 5: IA FAQ opcional con contexto (caching + guardrails).
+
+Criterios de aceptación (MVP)
+
+Se puede reservar una cita para un servicio configurado, recibiendo 3+ slots válidos.
+
+Dos usuarios no consiguen confirmar el mismo slot (uno recibe alternativa).
+
+Confirmación crea evento en Google Calendar y guarda gcal_event_id.
+
+Cancelación elimina evento y marca cancelled.
+
+FAQs responden al menos a: precios, servicios, dirección, horario.
+
+Todo funciona para ≥2 tenants sin fuga de datos (RLS verificada).

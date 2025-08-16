@@ -1,0 +1,35 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run pre-commit checks
+echo "🔍 Running pre-commit checks..."
+
+# Check for prohibited files
+echo "📁 Checking for prohibited files..."
+if find . -name "*temp*" -o -name "*tmp*" -o -name "*.bak" -o -name "*Copy*" -o -name "*TestData*" | grep -v node_modules | grep -v .git | head -1; then
+  echo "❌ Prohibited files found! Please remove them."
+  exit 1
+fi
+
+# Check for .swp files
+if find . -name ".*.swp" | grep .; then
+  echo "❌ Vim swap files found! Please remove them."
+  exit 1
+fi
+
+# Lint and format
+echo "🔧 Running linter..."
+pnpm lint || exit 1
+
+echo "🎨 Checking formatting..."
+pnpm format --check || exit 1
+
+# Type check
+echo "📝 Type checking..."
+pnpm typecheck || exit 1
+
+# Run tests
+echo "🧪 Running tests..."
+pnpm test --run || exit 1
+
+echo "✅ Pre-commit checks passed!"

@@ -1,0 +1,253 @@
+Protocolo anti-errores (Copilot + Claude Sonnet 4)
+0) Principios innegociables
+
+No tocar código estable sin: (1) issue, (2) plan de cambio, (3) PR con tests que lo prueben.
+
+Cambios mínimos y atómicos (una intención por PR).
+
+Nunca crear ficheros temporales, mocks “vacíos” o clases sin uso.
+
+Solo diffs necesarios: si un archivo no cambia su comportamiento, no lo toques (evita “noise diffs”).
+
+CI como juez: no se mergea nada que no pase lint + build + tests + migraciones.
+
+1) Flujo Git disciplinado
+
+Branching
+
+main: protegido, solo merge por PR aprobado.
+
+dev: integración de features antes de main (opcional).
+
+feat/<scope-corto> | fix/<bug> | chore/<tarea>.
+
+Commits
+
+Estilo Conventional Commits: feat:, fix:, refactor:, test:, docs:, chore:, perf:.
+
+Frecuencia: cada paso significativo (≤ 30 min por commit).
+
+Mensaje: qué + por qué + impacto en API/DB si aplica.
+
+Push seguro
+
+Habilitar pre-commit (ver §6) para frenar code smells y archivos prohibidos.
+
+No forzar (--force) salvo hotfix de emergencia y con aprobación.
+
+2) Política de modificación de código “que ya funciona”
+
+Antes de tocar:
+
+Abrir issue con: contexto, riesgo, endpoints/funciones afectadas, plan de rollback.
+
+Redactar Acceptance Criteria y Tests a añadir/ajustar.
+
+Tipos de cambio permitidos:
+
+Bugfix acotado con test que lo reproduce.
+
+Feature mínima detrás de flag/config; sin romper contratos públicos.
+
+Refactor sin cambio funcional: solo si hay cobertura de tests previa ≥ el módulo afectado.
+
+Prohibido:
+
+Cambios masivos de formato (“reformat all project”).
+
+Reubicar archivos sin motivo (rompe blame/histórico).
+
+Renombrar públicos sin compatibilidad/backward docs.
+
+3) “Guardarraíles” para Copilot/Claude (prompts y modo de trabajo)
+
+Prompt de edición segura (pegar en la PR o chat de la herramienta):
+
+“Haz un diff mínimo y autocontenido. No crees archivos nuevos salvo que lo especifique. No generes clases o funciones vacías. No muevas código. Mantén nombres y firmas. Escribe tests primero. Si el cambio requiere migración SQL, propónla en un archivo seed/migrations/xxxx.sql y actualiza el código para aplicarla de manera idempotente. No toques ficheros no relacionados.”
+
+Prompt de verificación:
+
+“Valida que el cambio cumple los Acceptance Criteria, que los tests cubren el escenario feliz y errores, y que no hay efectos colaterales. Enumera endpoints/consultas DB tocados y justifica cada línea del diff que modifica lógica.”
+
+Modo “plan-execute-verify” (LEV: Loop de Evaluación y Verificación)
+
+Plan (resumen de 5–10 líneas)
+
+Execute (diff mínimo + tests)
+
+Verify (razones por las que pasa o podría fallar + sugerencias de mejora)
+
+Abort si el plan implica refactor global o crear “scaffolds” vacíos.
+
+4) Estructura de cambios (Checklists por PR)
+
+Antes de abrir PR
+
+ Issue vinculado y scope claro.
+
+ Tests nuevos/ajustados.
+
+ Sin archivos temporales (.tmp, temp, Sample*.cs, *.bak, .*.swp).
+
+ Sin clases vacías o controladores dummy.
+
+ Documentado riesgo/rollback.
+
+Durante la review
+
+ El diff solo toca archivos relevantes.
+
+ Nombres y firmas públicas sin cambios, salvo decisión explicada.
+
+ Queries y migraciones: revisadas por 2 pares (riesgo de datos).
+
+ Logs y errores: mensajes accionables (tenant_id, appointment_id).
+
+Merge
+
+ CI verde (lint/build/test/migrate/downgrade).
+
+ Tag semántico si hay entrega (vX.Y.Z).
+
+5) “No crear basura”: reglas de generación
+
+Bloqueo de archivos prohibidos (pre-commit/CI)
+
+Falla el build si aparecen: *temp*, *tmp*, *.bak, *Copy*, *TestData* fuera de /tests.
+
+Clases/handlers sin uso
+
+Rechazar PR si hay clases sin referencias o métodos no invocados.
+
+Plantillas vacías
+
+No permitir controladores/handlers con TODOs; si algo es “futuro”, no se crea.
+
+6) Hooks locales (pre-commit) sugeridos
+
+.NET/TS (ajusta a tu stack)
+
+dotnet format --verify-no-changes
+
+dotnet build -c Release
+
+dotnet test --no-build
+
+Script que machetee nombres de archivo prohibidos y falle si encuentra clases sin miembros.
+
+SQL
+
+Linter simple (p. ej., sqlfluff) para migraciones.
+
+Conventional Commits:
+
+Hook que valide prefijos (feat|fix|refactor|test|docs|chore|perf).
+
+(Si tu repo es Node/TS, cambia por pnpm lint, pnpm test, etc.)
+
+7) CI mínima pero estricta (GitHub Actions)
+
+Jobs:
+
+lint: formateo/estilo.
+
+build: compila.
+
+test: ejecuta tests con coverage y umbral (p. ej. 75%).
+
+db-migrate: aplica migraciones sobre DB efímera → rollback → vuelve a aplicar (idempotencia).
+
+scan: busca archivos prohibidos y clases vacías.
+
+Reglas:
+
+PR requiere todos los checks verdes.
+
+Bloqueo de main sin 1 revisor humano.
+
+8) Migraciones y datos (cero sustos)
+
+Archivos: seed/migrations/YYYYMMDD-HHMM_desc.sql
+
+Contenido:
+
+Solo DDL/DML necesario para el cambio.
+
+Idempotente (usa if not exists/checks previos).
+
+Down script si hay riesgo.
+
+Proceso:
+
+CI ejecuta up → down → up en una DB temporal.
+
+En prod: online, sin locks largos; avisar si hay operaciones pesadas.
+
+9) Tests primero (TDD pragmático)
+
+Añade test que falle replicando el bug/caso nuevo.
+
+Cubre:
+
+Camino feliz + dos errores previsibles (inputs inválidos/colisiones de slot).
+
+Cache/estado: holds que expiran, conflictos concurrentes.
+
+E2E mínimo: reservar → hold → confirmar (Calendar) → cancelar (Calendar).
+(Esto valida el flujo crítico del sistema que definiste.) 
+
+10) Política de refactor
+
+Permitido: extraer función, renombrado interno, eliminar duplicación dentro del módulo tocado por la feature.
+
+No permitido: refactor transversal (muchos archivos) en la misma PR de una feature.
+
+Refactor mayor: PR dedicada solo refactor con cobertura previa demostrada.
+
+11) Manejo de cachés/artefactos
+
+Editor/IDE: .gitignore incluye .vs/, bin/, obj/, .idea/, node_modules/, dist/.
+
+Build reproducible: bloquear versiones en *.csproj/package.json.
+
+Evitar “archivos cacheados”:
+
+Limpieza antes de build en CI (dotnet clean, pnpm clean).
+
+No versionar artefactos de build ni lockfiles corruptos (si cambian, explica por qué).
+
+12) Seguridad y secretos
+
+Nada de credenciales en commits (CI escanea patrones).
+
+Variables de entorno en Actions Secrets/Store equivalente.
+
+Si un LLM sugiere pegar una key/token → abortar y regenerar con placeholders.
+
+13) Plantilla de PR (pegar en tu repositorio)
+## Objetivo
+- (breve descripción)
+
+## Cambios incluidos
+- [ ] Código mínimo necesario
+- [ ] Tests (nuevos/ajustados)
+- [ ] Migración SQL (si aplica)
+
+## Riesgos y rollback
+- Riesgos:
+- Plan de rollback:
+
+## Checklist
+- [ ] No archivos temporales/“dummy”
+- [ ] No toco módulos no relacionados
+- [ ] CI pasa: lint/build/test/db-migrate/scan
+
+Closes: #ISSUE_ID
+
+14) Prompt “anti-errores” para Copilot/Claude (copiar/usar en cada cambio)
+
+“Trabaja a diffs mínimos y sin archivos nuevos salvo que lo ordene. No generes clases vacías ni TODO. Mantén firmas públicas. Propón tests primero. Aporta solo el código que modifica el comportamiento para cumplir estos Acceptance Criteria: (pegar). Si implica DB, añade migración idempotente en seed/migrations/. Devuelve un diff limpio y explica cada línea que cambia lógica.”
+
+15) Alineación con el alcance del producto
+
+El protocolo aplica al chatbot WA multi-tenant: reservas con slots, holds, confirmación en Calendar, cancelaciones/reprogramaciones, y FAQs básicas, integrando WhatsApp API (360dialog), Supabase y Google Calendar; sin clases/archivos innecesarios. 

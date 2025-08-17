@@ -864,7 +864,7 @@ async function processAppointmentConfirmation(phoneNumber, contactName, tenantCo
     }
     
     // Buscar hold activo para este cliente
-    const response = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${tenantConfig.id}&customer_phone=eq.${phoneNumber}&status=eq.hold&hold_expires_at=gte.${new Date().toISOString()}&order=created_at.desc&limit=1&select=*,services(*)`, {
+    const response = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${tenantConfig.id}&customer_phone=eq.${phoneNumber}&status=eq.pending&hold_expires_at=gte.${new Date().toISOString()}&order=created_at.desc&limit=1&select=*,services(*)`, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
@@ -942,7 +942,7 @@ async function processAppointmentCancellation(phoneNumber, tenantConfig) {
     }
     
     // Buscar hold activo para cancelar
-    const response = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${tenantConfig.id}&customer_phone=eq.${phoneNumber}&status=eq.hold&hold_expires_at=gte.${new Date().toISOString()}&order=created_at.desc&limit=1`, {
+    const response = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${tenantConfig.id}&customer_phone=eq.${phoneNumber}&status=eq.pending&hold_expires_at=gte.${new Date().toISOString()}&order=created_at.desc&limit=1`, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
@@ -1454,7 +1454,7 @@ async function createAppointmentHold(tenantId, customerPhone, serviceId, startDa
       start_time: startDateTime,
       end_time: endDateTime,
       appointment_date: appointmentDate,
-      status: 'hold',
+      status: 'pending',
       hold_expires_at: holdExpiresAt,
       slot_metadata: slotMetadata
     };

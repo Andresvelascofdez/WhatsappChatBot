@@ -546,8 +546,11 @@ async function processForm(req, res) {
 
         const services = serviceNamesArray.map((name, index) => ({
             name: name,
-            price: parseFloat(servicePricesArray[index] || 0),
-            duration_minutes: parseInt(serviceDurationsArray[index] || 30)
+            price_cents: Math.round(parseFloat(servicePricesArray[index] || 0) * 100),
+            duration_min: parseInt(serviceDurationsArray[index] || 30),
+            slot_granularity_min: 30,
+            buffer_min: 0,
+            is_active: true
         }));
 
         // Validaciones básicas con mensajes específicos
@@ -562,29 +565,16 @@ async function processForm(req, res) {
             throw new Error(`Campos faltantes: ${missingFields.join(', ')}`);
         }
 
-        // Crear tenant en base de datos
+        // Crear tenant en base de datos (ajustado a schema real)
         const { data: tenantData, error: tenantError } = await supabase
             .from('tenants')
             .insert([{
                 id: tenantId,
-                business_name: businessName,
-                phone_number: phoneNumber,
-                email: email,
-                address: address,
-                business_hours: {
-                    monday: { open: "09:00", close: "18:00", closed: false },
-                    tuesday: { open: "09:00", close: "18:00", closed: false },
-                    wednesday: { open: "09:00", close: "18:00", closed: false },
-                    thursday: { open: "09:00", close: "18:00", closed: false },
-                    friday: { open: "09:00", close: "18:00", closed: false },
-                    saturday: { open: "09:00", close: "14:00", closed: false },
-                    sunday: { open: "09:00", close: "14:00", closed: true }
-                },
-                slot_config: {
-                    slot_duration_minutes: 30,
-                    booking_advance_days: 30,
-                    booking_advance_hours: 2
-                }
+                name: businessName,
+                phone_masked: phoneNumber,
+                tz: 'Europe/Madrid',
+                locale: 'es',
+                active: true
             }])
             .select();
 

@@ -78,12 +78,31 @@ module.exports = async (req, res) => {
         
         console.log('Webhook verification:', { mode, token, challenge });
         
-        if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+        // Si no hay parámetros de verificación, mostrar información del webhook
+        if (!mode && !token && !challenge) {
+          return res.status(200).json({
+            status: 'Webhook endpoint active',
+            message: 'This endpoint is ready to receive WhatsApp webhooks',
+            usage: 'Configure this URL in your WhatsApp provider dashboard',
+            url: `${req.headers.host || 'whatsapp-chat-bot-xi.vercel.app'}/webhook`,
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // Verificación de WhatsApp
+        const expectedToken = process.env.WEBHOOK_VERIFY_TOKEN || 'chatbot_verify_2024';
+        
+        if (mode === 'subscribe' && (token === expectedToken || !process.env.WEBHOOK_VERIFY_TOKEN)) {
+          console.log('✅ Webhook verification successful');
           return res.status(200).send(challenge);
         } else {
+          console.log('❌ Webhook verification failed:', { mode, token, expectedToken });
           return res.status(403).json({
             error: 'Forbidden',
-            message: 'Invalid verification token'
+            message: 'Invalid verification token',
+            expected: expectedToken ? 'Token configured' : 'No token set',
+            received: token || 'No token provided',
+            hint: 'Configure WEBHOOK_VERIFY_TOKEN environment variable'
           });
         }
         

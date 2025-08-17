@@ -1,4 +1,5 @@
 // WhatsApp Chatbot API for Vercel
+// Updated for customer management and appointment_date field
 module.exports = async (req, res) => {
   const { method, url } = req;
   

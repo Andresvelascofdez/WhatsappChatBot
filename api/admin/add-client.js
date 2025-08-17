@@ -476,51 +476,78 @@ function showForm(res) {
 
 async function processForm(req, res) {
     try {
-        // Procesar el body de la request
-        let body;
-        if (!req.body) {
-            body = await parseBody(req);
+        console.log('=== DEBUGGING REQUEST ===');
+        console.log('Method:', req.method);
+        console.log('Headers:', req.headers);
+        console.log('Raw body:', req.body);
+        console.log('Body type:', typeof req.body);
+        
+        // Intentar diferentes formas de parsear el body
+        let parsedData = {};
+        
+        if (req.body) {
+            if (typeof req.body === 'object') {
+                // Si ya es un objeto, usarlo directamente
+                parsedData = req.body;
+                console.log('Using body as object:', parsedData);
+            } else if (typeof req.body === 'string') {
+                // Si es string, parsearlo como URLSearchParams
+                const urlParams = new URLSearchParams(req.body);
+                for (let [key, value] of urlParams.entries()) {
+                    if (key.endsWith('[]')) {
+                        const baseKey = key.slice(0, -2);
+                        if (!parsedData[baseKey]) parsedData[baseKey] = [];
+                        parsedData[baseKey].push(value);
+                    } else {
+                        parsedData[key] = value;
+                    }
+                }
+                console.log('Parsed from string:', parsedData);
+            }
         } else {
-            body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+            // Si no hay body, intentar leer de la request
+            const body = await parseBody(req);
+            console.log('Read body from stream:', body);
+            const urlParams = new URLSearchParams(body);
+            for (let [key, value] of urlParams.entries()) {
+                if (key.endsWith('[]')) {
+                    const baseKey = key.slice(0, -2);
+                    if (!parsedData[baseKey]) parsedData[baseKey] = [];
+                    parsedData[baseKey].push(value);
+                } else {
+                    parsedData[key] = value;
+                }
+            }
+            console.log('Parsed from stream:', parsedData);
         }
         
-        // Debug: Log del body recibido
-        console.log('Raw body:', body);
-        console.log('Body type:', typeof body);
-        
-        // Parsear datos del formulario
-        const formData = new URLSearchParams(body);
-        
-        const tenantId = formData.get('tenantId');
-        const businessName = formData.get('businessName');
-        const phoneNumber = formData.get('phoneNumber');
-        const email = formData.get('email');
-        const address = formData.get('address') || null;
+        // Extraer campos
+        const tenantId = parsedData.tenantId;
+        const businessName = parsedData.businessName;
+        const phoneNumber = parsedData.phoneNumber;
+        const email = parsedData.email;
+        const address = parsedData.address || null;
 
-        // Debug: Log de campos extraídos
-        console.log('Parsed fields:', {
-            tenantId,
-            businessName,
-            phoneNumber,
-            email,
-            address
-        });
+        // Extraer servicios
+        const serviceNames = parsedData.serviceName || [];
+        const servicePrices = parsedData.servicePrice || [];
+        const serviceDurations = parsedData.serviceDuration || [];
 
-        // Parsear servicios
-        const serviceNames = formData.getAll('serviceName[]');
-        const servicePrices = formData.getAll('servicePrice[]');
-        const serviceDurations = formData.getAll('serviceDuration[]');
+        console.log('=== EXTRACTED DATA ===');
+        console.log('Fields:', { tenantId, businessName, phoneNumber, email, address });
+        console.log('Services:', { serviceNames, servicePrices, serviceDurations });
 
-        console.log('Services:', {
-            serviceNames,
-            servicePrices,
-            serviceDurations
-        });
+        // Asegurarse de que los servicios sean arrays
+        const serviceNamesArray = Array.isArray(serviceNames) ? serviceNames : (serviceNames ? [serviceNames] : []);
+        const servicePricesArray = Array.isArray(servicePrices) ? servicePrices : (servicePrices ? [servicePrices] : []);
+        const serviceDurationsArray = Array.isArray(serviceDurations) ? serviceDurations : (serviceDurations ? [serviceDurations] : []);
 
-        const services = serviceNames.map((name, index) => ({
+        console.log('Arrays normalized:', { serviceNamesArray, servicePricesArray, serviceDurationsArray });
+
+        const services = serviceNamesArray.map((name, index) => ({
             name: name,
-            price: parseFloat(servicePrices[index]),
-            duration_minutes: parseInt(serviceDurations[index])
+            price: parseFloat(servicePricesArray[index] || 0),
+            duration_minutes: parseInt(serviceDurationsArray[index] || 30)
         }));
 
         // Validaciones básicas con mensajes específicos

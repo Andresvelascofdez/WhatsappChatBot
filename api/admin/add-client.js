@@ -360,8 +360,13 @@ function showForm(res) {
                 <h3>💰 Servicios del Negocio</h3>
                 
                 <div class="info-box">
-                    <h4>💡 Configuración de Servicios</h4>
-                    <p>Agrega todos los servicios que ofrece el negocio. Puedes agregar más servicios después desde la base de datos.</p>
+                    <h4>� Configuración de Servicios Dinámicos</h4>
+                    <p>Cada servicio define su duración exacta y el sistema calcula automáticamente los horarios disponibles:</p>
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li>✅ <strong>Duración:</strong> Tiempo real que dura el servicio</li>
+                        <li>✅ <strong>Buffer:</strong> Tiempo extra entre servicios (limpieza, preparación)</li>
+                        <li>✅ <strong>Ejemplo:</strong> Corte (30min) + Buffer (10min) = Próxima cita en 40 minutos</li>
+                    </ul>
                 </div>
 
                 <div class="services-container" id="servicesContainer">
@@ -378,6 +383,11 @@ function showForm(res) {
                             <label>Duración (min) *</label>
                             <input type="number" name="serviceDuration[]" required min="5" max="480" placeholder="30">
                         </div>
+                        <div class="form-group">
+                            <label>Buffer extra (min)</label>
+                            <input type="number" name="serviceBuffer[]" min="0" max="60" placeholder="0" value="0">
+                            <small style="color: #666; font-size: 0.8rem;">Tiempo extra entre este servicio y el siguiente</small>
+                        </div>
                         <button type="button" class="btn btn-danger" onclick="removeService(this)">🗑️</button>
                     </div>
                 </div>
@@ -391,13 +401,15 @@ function showForm(res) {
                 
                 <div class="grid-2">
                     <div class="form-group">
-                        <label for="slotGranularity">Duración de slots (minutos) *</label>
+                        <label for="slotGranularity">Granularidad mínima de slots (minutos) *</label>
                         <select id="slotGranularity" name="slotGranularity" required>
-                            <option value="15">15 minutos</option>
-                            <option value="30" selected>30 minutos</option>
-                            <option value="45">45 minutos</option>
-                            <option value="60">60 minutos</option>
+                            <option value="5">5 minutos (máxima precisión)</option>
+                            <option value="15" selected>15 minutos (recomendado)</option>
+                            <option value="30">30 minutos (básico)</option>
                         </select>
+                        <small style="color: #666; font-size: 0.9rem;">
+                            ℹ️ Granularidad para calcular slots disponibles. Los servicios usan su duración exacta.
+                        </small>
                     </div>
                     
                     <div class="form-group">
@@ -436,14 +448,15 @@ function showForm(res) {
                 </div>
 
                 <div class="info-box">
-                    <h4>💡 Información sobre horarios</h4>
-                    <p>Los horarios de negocio se configurarán automáticamente como:</p>
+                    <h4>💡 Información sobre slots dinámicos</h4>
+                    <p>El sistema utiliza <strong>slots dinámicos</strong> que se ajustan automáticamente:</p>
                     <ul style="margin-left: 20px; margin-top: 10px;">
-                        <li>✅ Lunes a Viernes: 9:00 - 18:00</li>
-                        <li>✅ Sábado: 9:00 - 14:00</li>
-                        <li>✅ Domingo: Cerrado</li>
+                        <li>✅ <strong>Servicio de 30 min:</strong> Próxima cita disponible +30 min</li>
+                        <li>✅ <strong>Servicio de 45 min:</strong> Próxima cita disponible +45 min</li>
+                        <li>✅ <strong>Servicio de 60 min:</strong> Próxima cita disponible +60 min</li>
+                        <li>✅ <strong>Buffer configurable:</strong> Tiempo extra entre citas si es necesario</li>
                     </ul>
-                    <p>Puedes modificar estos horarios después desde la base de datos si es necesario.</p>
+                    <p><strong>Ejemplo:</strong> Corte (30min) a las 9:00 → Siguiente disponible: 9:30</p>
                 </div>
             </div>
 
@@ -473,6 +486,11 @@ function showForm(res) {
                 <div class="form-group">
                     <label>Duración (min) *</label>
                     <input type="number" name="serviceDuration[]" required min="5" max="480" placeholder="45">
+                </div>
+                <div class="form-group">
+                    <label>Buffer extra (min)</label>
+                    <input type="number" name="serviceBuffer[]" min="0" max="60" placeholder="0" value="0">
+                    <small style="color: #666; font-size: 0.8rem;">Tiempo extra entre este servicio y el siguiente</small>
                 </div>
                 <button type="button" class="btn btn-danger" onclick="removeService(this)">🗑️</button>
             \`;
@@ -601,24 +619,26 @@ async function processForm(req, res) {
         const serviceNames = parsedData['serviceName[]'] || [];
         const servicePrices = parsedData['servicePrice[]'] || [];
         const serviceDurations = parsedData['serviceDuration[]'] || [];
+        const serviceBuffers = parsedData['serviceBuffer[]'] || [];
 
         console.log('=== EXTRACTED DATA ===');
         console.log('Fields:', { tenantId, businessName, phoneNumber, email, address });
-        console.log('Services:', { serviceNames, servicePrices, serviceDurations });
+        console.log('Services:', { serviceNames, servicePrices, serviceDurations, serviceBuffers });
 
         // Asegurarse de que los servicios sean arrays
         const serviceNamesArray = Array.isArray(serviceNames) ? serviceNames : (serviceNames ? [serviceNames] : []);
         const servicePricesArray = Array.isArray(servicePrices) ? servicePrices : (servicePrices ? [servicePrices] : []);
         const serviceDurationsArray = Array.isArray(serviceDurations) ? serviceDurations : (serviceDurations ? [serviceDurations] : []);
+        const serviceBuffersArray = Array.isArray(serviceBuffers) ? serviceBuffers : (serviceBuffers ? [serviceBuffers] : []);
 
-        console.log('Arrays normalized:', { serviceNamesArray, servicePricesArray, serviceDurationsArray });
+        console.log('Arrays normalized:', { serviceNamesArray, servicePricesArray, serviceDurationsArray, serviceBuffersArray });
 
         const services = serviceNamesArray.map((name, index) => ({
             name: name,
             price_cents: Math.round(parseFloat(servicePricesArray[index] || 0) * 100),
             duration_min: parseInt(serviceDurationsArray[index] || 30),
-            slot_granularity_min: 30,
-            buffer_min: 0,
+            slot_granularity_min: slotGranularity, // Granularidad mínima para cálculos
+            buffer_min: parseInt(serviceBuffersArray[index] || 0), // Buffer específico por servicio
             is_active: true
         }));
 
@@ -637,11 +657,12 @@ async function processForm(req, res) {
         // Asegurar que las columnas adicionales existen (ejecutar migraciones si es necesario)
         await ensureTableColumns();
 
-        // Crear configuración de slots
+        // Crear configuración de slots dinámicos
         const slotConfig = {
-            slot_granularity: slotGranularity,
+            slot_granularity: slotGranularity, // Granularidad mínima para cálculos
             allow_same_day_booking: sameDayBooking,
-            max_advance_booking_days: maxAdvanceBooking
+            max_advance_booking_days: maxAdvanceBooking,
+            dynamic_slots: true // Indica que usa duración de servicio, no slots fijos
         };
 
         // Crear tenant en base de datos (ajustado a schema real)

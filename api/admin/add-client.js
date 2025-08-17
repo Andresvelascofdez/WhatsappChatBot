@@ -431,12 +431,21 @@ function showForm(res) {
             // Mostrar loading
             document.getElementById('loading').style.display = 'flex';
             
-            // Enviar formulario
+            // Enviar formulario como application/x-www-form-urlencoded
             const formData = new FormData(this);
+            const urlParams = new URLSearchParams();
+            
+            // Convertir FormData a URLSearchParams
+            for (let [key, value] of formData.entries()) {
+                urlParams.append(key, value);
+            }
             
             fetch('/admin/add-client', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: urlParams.toString()
             })
             .then(response => response.text())
             .then(html => {

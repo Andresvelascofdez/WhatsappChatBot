@@ -1,0 +1,19 @@
+{
+  "name": "whatsapp-booking-chatbot",
+  "version": "0.1.0",
+  "description": "Multi-tenant WhatsApp chatbot for appointment booking with Google Calendar integration",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "echo 'No build needed'",
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "axios": "^1.11.0",
+    "twilio": "^4.19.3",
+    "@supabase/supabase-js": "^2.38.0"
+  }
+}

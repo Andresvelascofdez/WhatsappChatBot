@@ -33,38 +33,20 @@ BEGIN
         WHERE table_name = 'tenants' AND column_name = 'slot_config'
     ) THEN
         ALTER TABLE tenants 
-        ADD COLUMN slot_config JSONB DEFAULT '{"default_slot_duration": 30, "slot_granularity": 15, "buffer_between_appointments": 0}'::jsonb;
+        ADD COLUMN slot_config JSONB DEFAULT '{"slot_granularity": 15, "allow_same_day_booking": true, "max_advance_booking_days": 30}'::jsonb;
     END IF;
 END $$;
 
 -- Actualizar tabla services para incluir configuraciones específicas por servicio
 DO $$ 
-BEGIN
-    -- Agregar buffer_before si no existe (tiempo antes del servicio)
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'services' AND column_name = 'buffer_before_minutes'
-    ) THEN
-        ALTER TABLE services 
-        ADD COLUMN buffer_before_minutes INTEGER DEFAULT 0;
-    END IF;
-    
-    -- Agregar buffer_after si no existe (tiempo después del servicio)
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'services' AND column_name = 'buffer_after_minutes'
-    ) THEN
-        ALTER TABLE services 
-        ADD COLUMN buffer_after_minutes INTEGER DEFAULT 0;
-    END IF;
-    
-    -- Agregar slot_duration personalizable por servicio
+BEGIN    
+    -- Agregar slot_duration personalizable por servicio (opcional)
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_name = 'services' AND column_name = 'custom_slot_duration'
     ) THEN
         ALTER TABLE services 
-        ADD COLUMN custom_slot_duration INTEGER; -- NULL = usar configuración del tenant
+        ADD COLUMN custom_slot_duration INTEGER; -- NULL = usar duration_minutes
     END IF;
 END $$;
 
@@ -136,12 +118,10 @@ $$ LANGUAGE plpgsql;
 COMMENT ON COLUMN tenants.calendar_config IS 'JSON structure: {"access_token": "string", "refresh_token": "string", "calendar_id": "string", "expires_at": "timestamp"}';
 
 -- Comentario sobre slot_config estructura esperada:
-COMMENT ON COLUMN tenants.slot_config IS 'JSON structure: {"default_slot_duration": 30, "slot_granularity": 15, "buffer_between_appointments": 5, "allow_same_day_booking": true, "max_advance_booking_days": 30}';
+COMMENT ON COLUMN tenants.slot_config IS 'JSON structure: {"slot_granularity": 15, "allow_same_day_booking": true, "max_advance_booking_days": 30}';
 
 -- Comentarios sobre campos de servicios:
-COMMENT ON COLUMN services.buffer_before_minutes IS 'Tiempo de preparación antes del servicio en minutos';
-COMMENT ON COLUMN services.buffer_after_minutes IS 'Tiempo de limpieza después del servicio en minutos';
-COMMENT ON COLUMN services.custom_slot_duration IS 'Duración personalizada de slot para este servicio (NULL = usar configuración del tenant)';
+COMMENT ON COLUMN services.custom_slot_duration IS 'Duración personalizada de slot para este servicio (NULL = usar duration_minutes del servicio)';
 
 -- Mensaje de confirmación
-SELECT 'Tabla tenants y appointments actualizadas para soporte de Google Calendar con configuración flexible de slots' as status;
+SELECT 'Tabla tenants y appointments actualizadas para soporte de Google Calendar con slots simples y directos' as status;

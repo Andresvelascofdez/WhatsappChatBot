@@ -1,6 +1,6 @@
-# 🤖 WhatsApp Booking Chatbot
+# 🤖 WhatsApp Booking Chatbot - Sistema Multi-Tenant
 
-**Multi-tenant WhatsApp chatbot para reservas de citas con integración de Google Calendar**
+**Chatbot inteligente de WhatsApp para reservas de citas con integración completa de Google Calendar**
 
 [![Deploy Status](https://img.shields.io/badge/Deploy-Vercel-brightgreen)](https://whatsapp-chat-bot-xi.vercel.app/health)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -8,214 +8,268 @@
 
 ## 🎯 **Características Principales**
 
-- ✅ **Multi-tenant**: Soporte para múltiples clientes en una sola instalación
-- ✅ **WhatsApp Integration**: Compatible con Twilio, UltraMsg, 360dialog y WhatsApp Cloud API
-- ✅ **Google Calendar**: Sincronización automática de citas
-- ✅ **Base de datos**: PostgreSQL con Supabase
-- ✅ **Deployment**: Listo para producción en Vercel
-- ✅ **API REST**: Endpoints completos para gestión de reservas
-- ✅ **Webhook**: Procesamiento en tiempo real de mensajes WhatsApp
+- 🏢 **Sistema Multi-Tenant**: Múltiples negocios con sus propios números de WhatsApp
+- 📱 **WhatsApp Business API**: Integración completa con Twilio
+- 📅 **Google Calendar**: Sincronización automática de citas y verificación de disponibilidad
+- 🗄️ **Base de Datos**: PostgreSQL con Supabase y Row Level Security
+- ⚡ **Serverless**: Desplegado en Vercel para máximo rendimiento
+- 🔄 **Sistema de Holds**: Reservas temporales con confirmación (5 min)
+- 🎨 **Slots Consecutivos**: Sin tiempos de buffer - máxima eficiencia
+- 🔧 **Configurable**: Servicios, precios y horarios por negocio
+
+## 🏢 **Sistema Multi-Tenant**
+
+Cada negocio tiene:
+- ✅ Su propio **número de WhatsApp Business**
+- ✅ Su propia **configuración de Google Calendar**
+- ✅ Sus propios **servicios, precios y horarios**
+- ✅ Su propia **configuración de slots**
+- ✅ **Detección automática** por número de WhatsApp
+
+### **Ejemplo de Uso:**
+```
+Peluquería Madrid: +34 911 123 456
+Barbería Barcelona: +34 932 654 321
+Spa Valencia: +34 963 987 654
+```
+**Todos funcionan independientemente en la misma instalación.**
 
 ## 🚀 **Demo en Vivo**
 
-- **API Health Check**: [https://whatsapp-chat-bot-xi.vercel.app/health](https://whatsapp-chat-bot-xi.vercel.app/health)
-- **Webhook Endpoint**: `https://whatsapp-chat-bot-xi.vercel.app/webhook`
+- **API Health**: [https://whatsapp-chat-bot-xi.vercel.app/health](https://whatsapp-chat-bot-xi.vercel.app/health)
+- **Webhook**: `https://whatsapp-chat-bot-xi.vercel.app/webhook`
 
 ## 📋 **Requisitos**
 
 - Node.js 18+
-- Cuenta de Supabase (gratis)
-- Proveedor de WhatsApp (Twilio recomendado)
-- Cuenta de Google Cloud para Calendar API
+- [Supabase](https://supabase.com) (gratis)
+- [Twilio WhatsApp](https://www.twilio.com/whatsapp) 
+- [Google Cloud](https://console.cloud.google.com) para Calendar API
 
 ## ⚡ **Instalación Rápida**
 
-### 1. **Clonar repositorio**
+### 1. **Clonar e Instalar**
 ```bash
 git clone https://github.com/Andresvelascofdez/WhatsappChatBot.git
 cd WhatsappChatBot
+npm install
 ```
 
-### 2. **Instalar dependencias**
+### 2. **Configurar Variables de Entorno en Vercel**
 ```bash
-pnpm install
+# Solo 4 variables necesarias:
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_ANON_KEY=tu-anon-key
+TWILIO_ACCOUNT_SID=tu-account-sid
+TWILIO_AUTH_TOKEN=tu-auth-token
 ```
 
-### 3. **Configurar variables de entorno**
-```bash
-cp .env.template .env
-# Editar .env con tus credenciales
+### 3. **Configurar Base de Datos**
+```sql
+-- 1. Ejecutar en Supabase SQL Editor:
+\i database/update_tables_for_calendar.sql
+
+-- 2. Configurar primer negocio (cambiar número de teléfono):
+\i database/setup_default_tenant.sql
 ```
 
-### 4. **Desplegar a Vercel**
+### 4. **Desplegar**
 ```bash
 vercel --prod
 ```
 
-## 🔧 **Configuración**
+## 🏢 **Configuración Multi-Tenant**
 
-### **Variables de Entorno Requeridas**
+### **Variables de Entorno (Solo 4 necesarias)**
 
 ```bash
-# Supabase Database
+# ✅ REQUERIDAS EN VERCEL
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_ANON_KEY=tu_anon_key_aqui
-SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key_aqui
-
-# WhatsApp Provider (Twilio recomendado)
-WHATSAPP_PROVIDER=twilio
 TWILIO_ACCOUNT_SID=tu_account_sid_de_twilio
 TWILIO_AUTH_TOKEN=tu_auth_token_de_twilio
-TWILIO_WHATSAPP_NUMBER=whatsapp:+1234567890
 
-# Google Calendar API
-GOOGLE_SERVICE_ACCOUNT_EMAIL=tu-service-account@proyecto.iam.gserviceaccount.com
-GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----..."
-GOOGLE_CALENDAR_ID=tu_calendar_id@group.calendar.google.com
+# ❌ YA NO NECESITAS:
+# TWILIO_PHONE_NUMBER (se configura por negocio en BD)
+# GOOGLE_* (se configura por negocio en BD)
 ```
 
-## 🏗️ **Arquitectura**
+### **Configuración por Negocio (Base de Datos)**
+
+Cada negocio se configura en la tabla `tenants`:
+
+```sql
+INSERT INTO tenants (
+    id, business_name, phone_number, 
+    address, email, slot_config, calendar_config
+) VALUES (
+    'mi_peluqueria',
+    'Peluquería Bella Vista',
+    '34911234567',  -- SIN el +, SOLO números
+    'Gran Vía 1, Madrid',
+    'info@peluqueria.com',
+    '{"slot_granularity": 15, "allow_same_day_booking": true}',
+    '{"access_token": "...", "calendar_id": "primary"}'
+);
+```
+
+## 🔧 **Arquitectura del Sistema**
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   WhatsApp      │────│   Vercel API     │────│   Supabase DB   │
-│   (Twilio)      │    │   (Node.js)      │    │   (PostgreSQL)  │
+│ WhatsApp Negocio│────│   Vercel API     │────│  Supabase DB    │
+│ +34911234567    │    │   Multi-Tenant   │    │  Multi-Tenant   │
+├─────────────────┤    │                  │    ├─────────────────┤
+│ WhatsApp Negocio│────│  ┌─────────────┐ │    │ ┌─────────────┐ │
+│ +34932654321    │    │  │ Auto-Detect │ │    │ │   tenants   │ │
+├─────────────────┤    │  │   Tenant    │ │    │ │  services   │ │
+│ WhatsApp Negocio│────│  │  by Phone   │ │    │ │appointments │ │
+│ +34963987654    │    │  └─────────────┘ │    │ └─────────────┘ │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                               │
-                              │
                        ┌──────────────────┐
-                       │  Google Calendar │
-                       │      API         │
+                       │ Google Calendar  │
+                       │ (Por Negocio)    │
                        └──────────────────┘
 ```
 
-## 📱 **Proveedores de WhatsApp Soportados**
+## 📱 **Flujo Multi-Tenant**
 
-| Proveedor | Costo/Mensaje | Setup | Recomendado |
-|-----------|---------------|-------|-------------|
-| **Twilio** | €0.005 | Fácil | ✅ **SÍ** |
-| UltraMsg | €39/mes | Muy fácil | Para pruebas |
-| 360dialog | Variable | Medio | Empresas |
-| WhatsApp Cloud API | Gratis* | Complejo | Grandes volúmenes |
+```
+1. Mensaje llega a: whatsapp:+34911234567
+2. Sistema busca: tenant con phone_number = '34911234567'  
+3. Respuesta: Configuración específica del negocio
+4. Reserva: Se guarda en calendario del negocio
+5. Confirmación: Desde el número del negocio
+```
 
-## 🔗 **Endpoints API**
+## 🔗 **API Endpoints**
 
 ### **Health Check**
 ```bash
-GET /health
+GET /health                    # Estado del sistema
+GET /api/status                # Estado detallado
 ```
 
 ### **Webhook WhatsApp**
 ```bash
-POST /webhook
+GET  /webhook                  # Verificación webhook
+POST /webhook                  # Procesamiento mensajes
 ```
 
-### **API de Reservas**
+## 📖 **Comandos del Chatbot**
+
+### **Comandos Básicos**
+```
+hola                          # Mensaje de bienvenida
+precios                       # Lista de servicios y precios  
+horarios                      # Horarios del negocio
+horarios DD/MM/YYYY          # Disponibilidad fecha específica
+```
+
+### **Sistema de Reservas**
+```
+reservar [servicio] DD/MM/YYYY HH:MM    # Hacer reserva
+confirmar                               # Confirmar reserva temporal
+cancelar                                # Cancelar reserva temporal
+mis citas                              # Ver citas confirmadas
+```
+
+### **Ejemplos**
+```
+reservar corte 25/08/2025 10:00        # Reserva corte de pelo
+reservar tinte 26/08/2025 14:30        # Reserva tinte
+horarios 25/08/2025                    # Ver disponibilidad
+```
+
+## 🛠️ **Configuración Avanzada**
+
+### **Agregar Nuevos Negocios**
+```sql
+-- Usar plantilla database/add_new_tenant.sql
+-- Cambiar todos los valores marcados con 🔥
+-- Ejecutar en Supabase SQL Editor
+```
+
+### **Configurar Google Calendar**
 ```bash
-GET    /api/bookings           # Listar reservas
-POST   /api/bookings           # Crear reserva
-GET    /api/bookings/:id       # Obtener reserva
-PUT    /api/bookings/:id       # Actualizar reserva
-DELETE /api/bookings/:id       # Cancelar reserva
+# 1. Seguir guía: GOOGLE_CALENDAR_SETUP.md
+# 2. Ejecutar: node setup-google-auth.js
+# 3. Actualizar BD con tokens obtenidos
+```
+
+### **Testing Completo**
+```bash
+# Seguir guía: TESTING_COMPLETE.md
+# Incluye todos los casos de prueba
 ```
 
 ## 💰 **Modelo de Negocio**
 
-### **Costos de Operación**
+### **Costos Operativos**
 - **Hosting**: Gratis (Vercel)
-- **Base de datos**: Gratis hasta 50k requests/mes (Supabase)
+- **Base de Datos**: Gratis hasta 50k requests/mes (Supabase)
 - **WhatsApp**: €0.005 por mensaje (Twilio)
 - **Google Calendar**: Gratis hasta 1M requests/mes
 
-### **Precio de Venta Sugerido**
-- **€30-40/mes por cliente**
-- **Margen**: 90%+ después de primeros 1000 mensajes/mes
+### **Escalabilidad**
+- ✅ **Ilimitados negocios** en la misma instalación
+- ✅ **Una cuenta Twilio** para todos los números
+- ✅ **Configuración independiente** por negocio
+- ✅ **Rendimiento optimizado** con índices de BD
 
 ## 🛠️ **Desarrollo**
 
 ### **Estructura del Proyecto**
 ```
-├── api/                 # Punto de entrada para Vercel
-│   └── chatbot.js      # API principal Node.js
-├── packages/           # Arquitectura monorepo
-│   ├── api/           # Lógica de la API
-│   ├── booking/       # Sistema de reservas
-│   ├── db/            # Esquemas de base de datos
-│   ├── gcal/          # Integración Google Calendar
-│   └── wa/            # Clientes WhatsApp
-├── seed/              # Scripts de inicialización de DB
-└── vercel.json        # Configuración de deployment
+├── api/                      # Vercel Serverless API
+│   └── chatbot.js           # Endpoint principal
+├── database/                # Scripts SQL
+│   ├── update_tables_for_calendar.sql
+│   ├── setup_default_tenant.sql
+│   └── add_new_tenant.sql
+├── GOOGLE_CALENDAR_SETUP.md # Guía configuración
+├── MULTI_TENANT_GUIDE.md    # Guía sistema multi-tenant
+├── TESTING_COMPLETE.md      # Guía testing completa
+└── setup-google-auth.js     # Script OAuth2 Google
 ```
 
-### **Comandos Útiles**
+### **Comandos de Desarrollo**
 ```bash
 # Desarrollo local
-pnpm dev
+npm run dev
 
-# Build
-pnpm build
-
-# Tests
-pnpm test
-
-# Linting
-pnpm lint
-
-# Formateo de código
-pnpm format
-```
-
-## 🔒 **Seguridad**
-
-- ✅ **Multi-tenant**: Separación por `tenantId`
-- ✅ **Row Level Security**: Implementado en Supabase
-- ✅ **Validación**: Esquemas Zod en todos los endpoints
-- ✅ **Rate limiting**: Protección contra spam
-- ✅ **Webhook verification**: Validación de firmas Twilio
-
-## 🚀 **Deployment**
-
-### **Vercel (Recomendado)**
-```bash
+# Deploy a Vercel
 vercel --prod
-```
 
-### **Configurar Webhook en Twilio**
-1. Ve a Twilio Console → WhatsApp Sandbox
-2. Configura webhook URL: `https://tu-app.vercel.app/webhook`
-3. Método: POST
+# Testing API
+curl https://tu-app.vercel.app/health
+```
 
 ## 📚 **Documentación Adicional**
 
-- [Setup Económico](SETUP_ECONOMICO.md) - Configuración de costos
-- [Plan de Negocio](PLAN_NEGOCIO.md) - Modelo económico detallado
-- [Deployment Guide](DEPLOYMENT.md) - Guía de despliegue
-- [WhatsApp Setup](WHATSAPP_SETUP.md) - Configuración WhatsApp
+- 📋 [**MULTI_TENANT_GUIDE.md**](MULTI_TENANT_GUIDE.md) - Sistema multi-tenant completo
+- 📅 [**GOOGLE_CALENDAR_SETUP.md**](GOOGLE_CALENDAR_SETUP.md) - Configuración Google Calendar
+- 🧪 [**TESTING_COMPLETE.md**](TESTING_COMPLETE.md) - Guía de testing completa
 
 ## 🤝 **Contribuir**
 
 1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
+2. Crea tu branch (`git checkout -b feature/amazing-feature`)
+3. Commit tus cambios (`git commit -m 'Add amazing feature'`)
+4. Push al branch (`git push origin feature/amazing-feature`)
 5. Abre un Pull Request
 
 ## 📄 **Licencia**
 
-Este proyecto está bajo la Licencia MIT. Ver [LICENSE](LICENSE) para más detalles.
+Este proyecto está bajo la Licencia MIT - ver [LICENSE](LICENSE) para más detalles.
 
-## ✨ **Autor**
+## 🆘 **Soporte**
 
-**Andrés Velasco** - [@Andresvelascofdez](https://github.com/Andresvelascofdez)
+- 📧 **Email**: andresvelascofdez@gmail.com
+- 🐛 **Issues**: [GitHub Issues](https://github.com/Andresvelascofdez/WhatsappChatBot/issues)
+- 📖 **Documentación**: Ver archivos `.md` en el proyecto
 
 ---
 
-## 🎯 **Estado del Proyecto: ✅ PRODUCCIÓN**
-
-- ✅ **API funcionando**: Desplegada en Vercel
-- ✅ **Webhook operativo**: Recibe mensajes WhatsApp
-- ✅ **Base de datos**: Configurada en Supabase
-- ✅ **Multi-tenant**: Sistema listo para múltiples clientes
-- ⚠️ **Pendiente**: Configuración de proveedor WhatsApp para envío
-
-**¿Listo para usar?** Solo necesitas agregar €20 a tu cuenta Twilio para envío de mensajes.
+⭐ **¡Dale una estrella si este proyecto te ayuda!**

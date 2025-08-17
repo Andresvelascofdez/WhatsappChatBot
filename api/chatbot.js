@@ -203,7 +203,7 @@ async function processTwilioMessage(data) {
     );
     
     if (response) {
-      await sendWhatsAppMessage(customerPhoneNumber, response);
+      await sendWhatsAppMessage(customerPhoneNumber, response, tenantConfig);
     }
   } catch (error) {
     console.error('Error processing Twilio message:', error);
@@ -261,7 +261,7 @@ async function processIncomingMessage(message, contacts) {
     
     // NOTA: En webhooks genéricos, necesitamos obtener el número de destino del contexto
     // Por ahora usaremos un tenant por defecto hasta implementar la identificación completa
-    const businessPhoneNumber = process.env.DEFAULT_BUSINESS_PHONE || '14155238886';
+    const businessPhoneNumber = '14155238886'; // Fallback para webhooks genéricos
     
     console.log(`Mensaje de ${contactName} (${from}) para negocio (${businessPhoneNumber}):`, {
       type,
@@ -283,7 +283,7 @@ async function processIncomingMessage(message, contacts) {
       const response = await generateResponse(messageText, from, contactName, tenantConfig);
       
       if (response) {
-        await sendWhatsAppMessage(from, response);
+        await sendWhatsAppMessage(from, response, tenantConfig);
       }
     }
   } catch (error) {
@@ -388,9 +388,7 @@ function getDefaultTenantConfig() {
       sunday: { closed: true }
     },
     slot_config: {
-      default_slot_duration: 30,
       slot_granularity: 15, // Slots cada 15 minutos
-      buffer_between_appointments: 5,
       allow_same_day_booking: true,
       max_advance_booking_days: 30
     },
@@ -400,43 +398,35 @@ function getDefaultTenantConfig() {
         name: 'Corte de pelo', 
         price: 15, 
         duration_minutes: 30,
-        buffer_before_minutes: 5,
-        buffer_after_minutes: 5,
-        custom_slot_duration: null // Usar configuración del tenant
+        custom_slot_duration: null // Usar duration_minutes
       },
       { 
         id: 2, 
-        name: 'Tinte', 
+        name: 'Corte + Barba', 
         price: 25, 
-        duration_minutes: 60,
-        buffer_before_minutes: 10,
-        buffer_after_minutes: 15,
-        custom_slot_duration: 90 // Slot personalizado más largo
+        duration_minutes: 45, // 15 min más que corte solo
+        custom_slot_duration: null
       },
       { 
         id: 3, 
-        name: 'Mechas', 
+        name: 'Tinte', 
         price: 35, 
-        duration_minutes: 90,
-        buffer_before_minutes: 15,
-        buffer_after_minutes: 15,
-        custom_slot_duration: 120 // Slot personalizado más largo
+        duration_minutes: 60,
+        custom_slot_duration: null
       },
       { 
         id: 4, 
-        name: 'Corte + Tinte', 
-        price: 35, 
-        duration_minutes: 90,
-        buffer_before_minutes: 10,
-        buffer_after_minutes: 15,
-        custom_slot_duration: 120
+        name: 'Mechas', 
+        price: 45, 
+        duration_minutes: 90, // Servicio largo
+        custom_slot_duration: null
       }
     ],
     faqs: [
       {
         id: 1,
         question: '¿Cuáles son nuestros precios?',
-        answer: 'Nuestros precios son: Corte €15, Tinte €25, Mechas €35, Corte + Tinte €35',
+        answer: 'Nuestros precios son: Corte €15, Corte + Barba €25, Tinte €35, Mechas €45',
         keywords: ['precio', 'precios', 'coste', 'costo', 'cuanto', 'cuánto'],
         category: 'precios'
       },
@@ -771,17 +761,15 @@ Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
     
     // Verificar si el horario solicitado está disponible
     const requestedSlot = slotsResult.slots.find(slot => {
-      const serviceStart = new Date(slot.serviceStart);
-      return serviceStart.getHours() === parseInt(hour) && serviceStart.getMinutes() === parseInt(minute);
+      const slotStart = new Date(slot.startTime);
+      return slotStart.getHours() === parseInt(hour) && slotStart.getMinutes() === parseInt(minute);
     });
     
     if (!requestedSlot) {
       let availableSlotsText = '';
       slotsResult.slots.forEach((slot, index) => {
         const duration = `${slot.serviceDuration} min`;
-        const bufferInfo = slot.bufferBefore || slot.bufferAfter ? 
-          ` (incluye ${slot.bufferBefore + slot.bufferAfter} min preparación)` : '';
-        availableSlotsText += `${index + 1}. ${slot.displayTime} - ${duration}${bufferInfo}\n`;
+        availableSlotsText += `${index + 1}. ${slot.displayTime} - ${duration}\n`;
       });
       
       if (availableSlotsText === '') {
@@ -800,18 +788,15 @@ Para reservar: *reservar ${serviceName} ${dateStr} [hora]*
 Ejemplo: *reservar ${serviceName} ${dateStr} ${slotsResult.slots[0]?.displayTime}*`;
     }
     
-    // Crear hold temporal usando el slot completo (con buffers)
+    // Crear hold temporal usando exactamente la duración del servicio
     const holdResult = await createAppointmentHold(
       tenantConfig.id,
       phoneNumber,
       service.id,
-      requestedSlot.slotStart,  // Usar slot completo
-      requestedSlot.slotEnd,    // Usar slot completo
+      requestedSlot.startTime,
+      requestedSlot.endTime,
       {
-        serviceStart: requestedSlot.serviceStart,
-        serviceEnd: requestedSlot.serviceEnd,
-        bufferBefore: requestedSlot.bufferBefore,
-        bufferAfter: requestedSlot.bufferAfter
+        serviceDuration: requestedSlot.serviceDuration
       }
     );
     
@@ -1381,20 +1366,14 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
     
     // Obtener configuración de slots del tenant
     const slotConfig = tenantConfig.slot_config || {
-      default_slot_duration: 30,
       slot_granularity: 15,
-      buffer_between_appointments: 0
+      allow_same_day_booking: true,
+      max_advance_booking_days: 30
     };
     
-    // Usar duración personalizada del servicio o la por defecto del tenant
-    const serviceDuration = service.custom_slot_duration || service.duration_minutes || slotConfig.default_slot_duration;
+    // Usar duración del servicio directamente (custom_slot_duration o duration_minutes)
+    const serviceDuration = service.custom_slot_duration || service.duration_minutes || 30;
     const slotGranularity = slotConfig.slot_granularity || 15;
-    const bufferBetween = slotConfig.buffer_between_appointments || 0;
-    const bufferBefore = service.buffer_before_minutes || 0;
-    const bufferAfter = service.buffer_after_minutes || 0;
-    
-    // Calcular duración total incluyendo buffers
-    const totalDuration = bufferBefore + serviceDuration + bufferAfter;
     
     const slots = [];
     const startHour = parseInt(openTime.split(':')[0]);
@@ -1409,14 +1388,12 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
     endTime.setHours(endHour, endMinute, 0, 0);
     
     while (currentTime < endTime) {
-      // Calcular inicio real del servicio (después del buffer)
-      const serviceStart = new Date(currentTime.getTime() + bufferBefore * 60000);
-      const serviceEnd = new Date(serviceStart.getTime() + serviceDuration * 60000);
-      const slotEnd = new Date(serviceEnd.getTime() + bufferAfter * 60000);
+      // El slot es exactamente la duración del servicio
+      const slotEnd = new Date(currentTime.getTime() + serviceDuration * 60000);
       
-      // Verificar que el slot completo (con buffers) termine antes del cierre
+      // Verificar que el servicio termine antes del cierre
       if (slotEnd <= endTime) {
-        // Verificar disponibilidad en calendario (periodo completo con buffers)
+        // Verificar disponibilidad en calendario para la duración exacta del servicio
         const isAvailable = await checkCalendarAvailability(
           tenantConfig.id,
           currentTime.toISOString(),
@@ -1425,17 +1402,13 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
         
         if (isAvailable) {
           slots.push({
-            slotStart: currentTime.toISOString(), // Inicio del slot completo
-            slotEnd: slotEnd.toISOString(),       // Fin del slot completo
-            serviceStart: serviceStart.toISOString(), // Inicio real del servicio
-            serviceEnd: serviceEnd.toISOString(),     // Fin real del servicio
-            displayTime: serviceStart.toLocaleTimeString('es-ES', { 
+            startTime: currentTime.toISOString(),
+            endTime: slotEnd.toISOString(),
+            displayTime: currentTime.toLocaleTimeString('es-ES', { 
               hour: '2-digit', 
               minute: '2-digit',
               timeZone: 'Europe/Madrid'
             }),
-            bufferBefore,
-            bufferAfter,
             serviceDuration
           });
         }
@@ -1450,10 +1423,7 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
       slots: slots.slice(0, 5), // Máximo 5 slots
       slotConfig: {
         granularity: slotGranularity,
-        serviceDuration,
-        bufferBefore,
-        bufferAfter,
-        totalDuration
+        serviceDuration
       }
     };
   } catch (error) {
@@ -1463,17 +1433,25 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
 }
 
 // Función para enviar mensaje de WhatsApp
-async function sendWhatsAppMessage(to, message) {
+async function sendWhatsAppMessage(to, message, tenantConfig = null) {
   try {
     // Limpiar variables de entorno eliminando caracteres de salto de línea
     const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
     const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-    const twilioWhatsAppNumber = (process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886').trim();
+    
+    // Usar número del tenant si está disponible, sino usar fallback hardcoded
+    let fromPhoneNumber;
+    if (tenantConfig?.phone_number) {
+      fromPhoneNumber = `whatsapp:+${tenantConfig.phone_number}`;
+    } else {
+      fromPhoneNumber = 'whatsapp:+14155238886'; // Fallback para desarrollo/testing
+    }
     
     console.log('Twilio credentials check:', {
       accountSid: accountSid ? `${accountSid.substring(0, 8)}...` : 'MISSING',
       authToken: authToken ? `${authToken.substring(0, 8)}...` : 'MISSING',
-      twilioNumber: twilioWhatsAppNumber
+      fromNumber: fromPhoneNumber,
+      tenant: tenantConfig?.business_name || 'Default'
     });
     
     if (!accountSid || !authToken) {
@@ -1485,7 +1463,7 @@ async function sendWhatsAppMessage(to, message) {
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
     
     // Asegurar formato correcto para From y To
-    const fromNumber = twilioWhatsAppNumber.startsWith('whatsapp:') ? twilioWhatsAppNumber : `whatsapp:${twilioWhatsAppNumber}`;
+    const fromNumber = fromPhoneNumber.startsWith('whatsapp:') ? fromPhoneNumber : `whatsapp:${fromPhoneNumber}`;
     const toNumber = to.startsWith('whatsapp:') ? to : `whatsapp:+${to}`;
     
     // Preparar datos del mensaje

@@ -1,5 +1,6 @@
 // WhatsApp Chatbot API for Vercel
 // Updated for customer management and appointment_date field
+// Added automatic Google Calendar token refresh system
 module.exports = async (req, res) => {
   const { method, url } = req;
   

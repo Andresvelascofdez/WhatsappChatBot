@@ -294,6 +294,11 @@ async function processIncomingMessage(message, contacts) {
 // Función para buscar tenant por número de teléfono
 async function getTenantByPhoneNumber(phoneNumber) {
   try {
+    // Normalizar número de teléfono (quitar + y otros caracteres)
+    const normalizedPhone = phoneNumber.replace(/[^0-9]/g, '');
+    
+    console.log(`🔍 Buscando tenant para número: ${phoneNumber} -> normalizado: ${normalizedPhone}`);
+    
     // Configuración de Supabase
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -304,8 +309,8 @@ async function getTenantByPhoneNumber(phoneNumber) {
       return getDefaultTenantConfig();
     }
     
-    // Buscar tenant por número de teléfono
-    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?phone_number=eq.${phoneNumber}&select=*`, {
+    // Buscar tenant por número de teléfono normalizado
+    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?phone=eq.${normalizedPhone}&select=*`, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
@@ -327,8 +332,8 @@ async function getTenantByPhoneNumber(phoneNumber) {
     }
     
     const tenant = tenants[0];
-    console.log(`Found tenant: ${tenant.business_name} (ID: ${tenant.id})`);
-    
+    console.log(`Found tenant: ${tenant.name} (ID: ${tenant.id})`);
+
     // Cargar servicios del tenant con configuraciones de slots
     const servicesResponse = await fetch(`${supabaseUrl}/rest/v1/services?tenant_id=eq.${tenant.id}&select=*`, {
       method: 'GET',
@@ -375,8 +380,8 @@ async function getTenantByPhoneNumber(phoneNumber) {
 function getDefaultTenantConfig() {
   return {
     id: 'default',
-    business_name: 'Peluquería Bella Vista',
-    phone_number: '14155238886',
+    name: 'Peluquería Bella Vista',
+    phone: '14155238886',
     address: 'Calle Principal 123',
     business_hours: {
       monday: { open: '09:00', close: '18:00' },
@@ -1356,14 +1361,6 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
     const requestedDateObj = new Date(requestedDate);
     const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][requestedDateObj.getDay()];
     
-    const businessHours = tenantConfig.business_hours?.[dayOfWeek];
-    if (!businessHours || businessHours.closed) {
-      return { success: false, error: 'Business closed on this day' };
-    }
-    
-    const openTime = businessHours.open;
-    const closeTime = businessHours.close;
-    
     // Obtener configuración de slots del tenant
     const slotConfig = tenantConfig.slot_config || {
       slot_granularity: 15,
@@ -1371,8 +1368,20 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
       max_advance_booking_days: 30
     };
     
-    // Usar duración del servicio directamente (custom_slot_duration o duration_minutes)
-    const serviceDuration = service.custom_slot_duration || service.duration_minutes || 30;
+    // Buscar horarios de negocio - primero en slot_config, luego en business_hours, finalmente por defecto
+    const businessHours = slotConfig.business_hours?.[dayOfWeek] || 
+                         tenantConfig.business_hours?.[dayOfWeek] || 
+                         { open: '09:00', close: '18:00', closed: false };
+                         
+    if (businessHours.closed) {
+      return { success: false, error: 'Business closed on this day' };
+    }
+    
+    const openTime = businessHours.open || '09:00';
+    const closeTime = businessHours.close || '18:00';
+    
+    // Usar duración del servicio directamente (custom_slot_duration o duration_min)
+    const serviceDuration = service.custom_slot_duration || service.duration_min || service.duration_minutes || 30;
     const slotGranularity = slotConfig.slot_granularity || 15;
     
     const slots = [];

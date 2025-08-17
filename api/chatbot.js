@@ -1474,7 +1474,7 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
     
     return {
       success: true,
-      slots: slots.slice(0, 5), // Máximo 5 slots
+      slots: slots, // Mostrar todos los slots disponibles
       slotConfig: {
         granularity: slotGranularity,
         serviceDuration

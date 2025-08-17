@@ -485,27 +485,83 @@ ${relevantFAQ.answer}
 ¿Te ha sido útil esta información? ¿Necesitas algo más?`;
     }
     
-    // Hacer reserva
+    // Hacer reserva - Detectar diferentes formatos
     if (messageText.includes('reservar') || messageText.includes('cita') || messageText.includes('reserva')) {
+      // Intentar parsear comando completo: "reservar [servicio] [fecha] [hora]"
+      const reserveMatch = messageText.match(/reservar\s+(.+?)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})/);
+      
+      if (reserveMatch) {
+        const [, serviceName, dateStr, timeStr] = reserveMatch;
+        return await processFullReservationCommand(serviceName, dateStr, timeStr, phoneNumber, contactName, tenantConfig);
+      }
+      
+      // Si no tiene formato completo, mostrar instrucciones
       let servicesText = '';
       services.forEach((service, index) => {
-        servicesText += `   • ${service.name} - €${service.price}\n`;
+        servicesText += `   ${index + 1}. ${service.name} - €${service.price} (${service.duration_minutes || 30} min)\n`;
       });
       
       return `📅 *Hacer una Reserva*
 
-Para realizar tu reserva, necesito algunos datos:
+Para realizar tu reserva, puedes:
 
-1️⃣ ¿Qué servicio necesitas?
-${servicesText}
-2️⃣ ¿Qué día prefieres?
-   (Formato: DD/MM/YYYY)
-
-3️⃣ ¿En qué horario?
-   • Horarios disponibles: ${getBusinessHoursText(tenantConfig.business_hours)}
-
+🔢 *Opción 1: Comando completo*
 Escribe: *reservar [servicio] [fecha] [hora]*
-Ejemplo: reservar corte 25/08/2025 10:00`;
+Ejemplo: reservar corte 25/08/2025 10:00
+
+🔢 *Opción 2: Paso a paso*
+Responde con el número del servicio:
+
+${servicesText}
+Ejemplo: escribe *1* para Corte de pelo
+
+💡 *Tip*: Usa el formato DD/MM/YYYY para fechas`;
+    }
+    
+    // Procesar selección de servicio por número
+    if (messageText.match(/^[1-9]$/)) {
+      const serviceIndex = parseInt(messageText) - 1;
+      if (serviceIndex >= 0 && serviceIndex < services.length) {
+        const selectedService = services[serviceIndex];
+        
+        return `✅ *Servicio seleccionado: ${selectedService.name}*
+💰 Precio: €${selectedService.price}
+⏱️ Duración: ${selectedService.duration_minutes || 30} minutos
+
+📅 *Ahora elige la fecha*
+Escribe la fecha en formato DD/MM/YYYY
+Ejemplo: 25/08/2025
+
+💡 Horarios disponibles: ${getBusinessHoursText(tenantConfig.business_hours)}`;
+      }
+    }
+    
+    // Procesar fecha (formato DD/MM/YYYY)
+    const dateMatch = messageText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dateMatch) {
+      const [, day, month, year] = dateMatch;
+      const requestedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      
+      // Aquí necesitaríamos mantener estado de la conversación
+      // Por simplicidad, vamos a pedir que usen el comando completo
+      return `📅 *Fecha recibida: ${day}/${month}/${year}*
+
+Para continuar, usa el comando completo:
+*reservar [servicio] ${day}/${month}/${year} [hora]*
+
+Ejemplo: reservar corte ${day}/${month}/${year} 10:00
+
+⏰ Horarios disponibles: ${getBusinessHoursText(tenantConfig.business_hours)}`;
+    }
+    
+    // Confirmar cita
+    if (messageText === 'confirmar') {
+      return await processAppointmentConfirmation(phoneNumber, contactName, tenantConfig);
+    }
+    
+    // Cancelar cita
+    if (messageText === 'cancelar') {
+      return await processAppointmentCancellation(phoneNumber, tenantConfig);
     }
     
     // Ver servicios
@@ -624,6 +680,265 @@ No estoy seguro de cómo ayudarte con eso. Aquí tienes las opciones disponibles
   }
 }
 
+// ==================== RESERVATION FLOW HANDLERS ====================
+
+// Función para procesar comando completo de reserva
+async function processFullReservationCommand(serviceName, dateStr, timeStr, phoneNumber, contactName, tenantConfig) {
+  try {
+    // Buscar servicio por nombre
+    const service = tenantConfig.services.find(s => 
+      s.name.toLowerCase().includes(serviceName.toLowerCase())
+    );
+    
+    if (!service) {
+      const availableServices = tenantConfig.services.map(s => `• ${s.name}`).join('\n');
+      return `❌ *Servicio no encontrado*
+
+Servicios disponibles:
+${availableServices}
+
+Intenta de nuevo: *reservar [servicio] ${dateStr} ${timeStr}*`;
+    }
+    
+    // Validar fecha
+    const [day, month, year] = dateStr.split('/');
+    const requestedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (requestedDate < today) {
+      return `❌ *Fecha inválida*
+
+No puedes reservar en el pasado. 
+Intenta con una fecha futura: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
+    }
+    
+    // Validar hora
+    const [hour, minute] = timeStr.split(':');
+    const requestedDateTime = new Date(requestedDate);
+    requestedDateTime.setHours(parseInt(hour), parseInt(minute), 0, 0);
+    
+    // Crear fecha/hora de fin
+    const endDateTime = new Date(requestedDateTime.getTime() + (service.duration_minutes || 30) * 60000);
+    
+    // Generar slots disponibles para ese día
+    const slotsResult = await generateAvailableSlots(tenantConfig, service.id, requestedDate.toISOString());
+    
+    if (!slotsResult.success) {
+      return `❌ *${slotsResult.error}*
+
+Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
+    }
+    
+    // Verificar si el horario solicitado está disponible
+    const requestedSlot = slotsResult.slots.find(slot => {
+      const slotStart = new Date(slot.startTime);
+      return slotStart.getHours() === parseInt(hour) && slotStart.getMinutes() === parseInt(minute);
+    });
+    
+    if (!requestedSlot) {
+      let availableSlotsText = '';
+      slotsResult.slots.forEach((slot, index) => {
+        availableSlotsText += `${index + 1}. ${slot.displayTime}\n`;
+      });
+      
+      if (availableSlotsText === '') {
+        return `❌ *No hay horarios disponibles para ${dateStr}*
+
+Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
+      }
+      
+      return `❌ *Horario ${timeStr} no disponible para ${dateStr}*
+
+⏰ *Horarios disponibles:*
+${availableSlotsText}
+Para reservar uno: *reservar ${serviceName} ${dateStr} [hora]*
+Ejemplo: *reservar ${serviceName} ${dateStr} ${slotsResult.slots[0]?.displayTime}*`;
+    }
+    
+    // Crear hold temporal
+    const holdResult = await createAppointmentHold(
+      tenantConfig.id,
+      phoneNumber,
+      service.id,
+      requestedSlot.startTime,
+      requestedSlot.endTime
+    );
+    
+    if (!holdResult.success) {
+      return `❌ *Error al reservar slot*
+
+${holdResult.error}
+Intenta de nuevo en unos momentos.`;
+    }
+    
+    // Enviar confirmación con hold
+    return `🎯 *¡Slot reservado temporalmente!*
+
+📋 *Detalles de tu reserva:*
+👤 Cliente: ${contactName}
+💇‍♀️ Servicio: ${service.name}
+📅 Fecha: ${dateStr}
+🕐 Hora: ${timeStr}
+⏱️ Duración: ${service.duration_minutes || 30} min
+💰 Precio: €${service.price}
+
+⏰ *Este slot está reservado por 5 minutos*
+
+Para CONFIRMAR tu cita, responde: *confirmar*
+Para CANCELAR, responde: *cancelar*
+
+ID de reserva: ${holdResult.appointmentId}`;
+    
+  } catch (error) {
+    console.error('Error processing reservation command:', error);
+    return `❌ *Error procesando reserva*
+
+Intenta de nuevo: *reservar [servicio] [DD/MM/YYYY] [HH:MM]*
+Ejemplo: *reservar corte 25/08/2025 10:00*`;
+  }
+}
+
+// Función para procesar confirmación de cita
+async function processAppointmentConfirmation(phoneNumber, contactName, tenantConfig) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured');
+    }
+    
+    // Buscar hold activo para este cliente
+    const response = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${tenantConfig.id}&customer_phone=eq.${phoneNumber}&status=eq.hold&hold_expires_at=gte.${new Date().toISOString()}&order=created_at.desc&limit=1&select=*,services(*)`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Error fetching appointment hold');
+    }
+    
+    const appointments = await response.json();
+    if (appointments.length === 0) {
+      return `❌ *No hay reservas pendientes*
+
+No tienes ninguna reserva temporal activa.
+Para hacer una nueva reserva: *reservar [servicio] [DD/MM/YYYY] [HH:MM]*`;
+    }
+    
+    const appointment = appointments[0];
+    
+    // Confirmar la cita
+    const confirmResult = await confirmAppointment(appointment.id, {
+      phone: phoneNumber,
+      name: contactName
+    });
+    
+    if (!confirmResult.success) {
+      return `❌ *Error confirmando cita*
+
+${confirmResult.error}
+Intenta de nuevo o contacta directamente.`;
+    }
+    
+    const appointmentDate = new Date(appointment.start_time);
+    const formattedDate = appointmentDate.toLocaleDateString('es-ES');
+    const formattedTime = appointmentDate.toLocaleTimeString('es-ES', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    return `✅ *¡Cita confirmada!*
+
+📋 *Detalles confirmados:*
+👤 Cliente: ${contactName}
+💇‍♀️ Servicio: ${appointment.services.name}
+📅 Fecha: ${formattedDate}
+🕐 Hora: ${formattedTime}
+⏱️ Duración: ${appointment.services.duration_minutes || 30} min
+💰 Precio: €${appointment.services.price}
+
+📧 *Se ha creado un evento en el calendario*
+🔗 ${confirmResult.eventLink || 'Revisa tu calendario'}
+
+📞 Para cancelar o reprogramar, contacta directamente.
+ID de cita: ${confirmResult.appointmentId}`;
+    
+  } catch (error) {
+    console.error('Error confirming appointment:', error);
+    return `❌ *Error confirmando cita*
+
+Intenta de nuevo en unos momentos.`;
+  }
+}
+
+// Función para procesar cancelación de cita  
+async function processAppointmentCancellation(phoneNumber, tenantConfig) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured');
+    }
+    
+    // Buscar hold activo para cancelar
+    const response = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${tenantConfig.id}&customer_phone=eq.${phoneNumber}&status=eq.hold&hold_expires_at=gte.${new Date().toISOString()}&order=created_at.desc&limit=1`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Error fetching appointment hold');
+    }
+    
+    const appointments = await response.json();
+    if (appointments.length === 0) {
+      return `❌ *No hay reservas para cancelar*
+
+No tienes ninguna reserva temporal activa.`;
+    }
+    
+    const appointment = appointments[0];
+    
+    // Cancelar el hold (eliminar de la base de datos)
+    const cancelResponse = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment.id}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!cancelResponse.ok) {
+      throw new Error('Error canceling appointment hold');
+    }
+    
+    return `✅ *Reserva cancelada*
+
+Tu reserva temporal ha sido cancelada exitosamente.
+El slot está ahora disponible para otros clientes.
+
+Para hacer una nueva reserva: *reservar [servicio] [DD/MM/YYYY] [HH:MM]*`;
+    
+  } catch (error) {
+    console.error('Error canceling appointment:', error);
+    return `❌ *Error cancelando reserva*
+
+Intenta de nuevo en unos momentos.`;
+  }
+}
+
 // Función auxiliar para formatear horarios de negocio
 function getBusinessHoursText(businessHours) {
   if (!businessHours) {
@@ -653,6 +968,417 @@ function getBusinessHoursText(businessHours) {
   });
   
   return hoursText.trim();
+}
+
+// ==================== GOOGLE CALENDAR INTEGRATION ====================
+
+// Función para obtener token de acceso de Google Calendar
+async function getGoogleCalendarToken(tenantId) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured');
+    }
+    
+    // Buscar credenciales de Google Calendar para el tenant
+    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${tenantId}&select=calendar_config`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Error fetching tenant calendar config');
+    }
+    
+    const tenants = await response.json();
+    if (tenants.length === 0 || !tenants[0].calendar_config) {
+      throw new Error('No calendar configuration found for tenant');
+    }
+    
+    return tenants[0].calendar_config;
+  } catch (error) {
+    console.error('Error getting Google Calendar token:', error);
+    throw error;
+  }
+}
+
+// Función para verificar disponibilidad en Google Calendar
+async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
+  try {
+    const calendarConfig = await getGoogleCalendarToken(tenantId);
+    const { access_token, calendar_id } = calendarConfig;
+    
+    if (!access_token || !calendar_id) {
+      throw new Error('Calendar access token or calendar ID not configured');
+    }
+    
+    const url = `https://www.googleapis.com/calendar/v3/freeBusy`;
+    
+    const requestBody = {
+      timeMin: startDateTime,
+      timeMax: endDateTime,
+      items: [{ id: calendar_id }]
+    };
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Calendar API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    const busyTimes = result.calendars?.[calendar_id]?.busy || [];
+    
+    // Si hay conflictos, el slot no está disponible
+    return busyTimes.length === 0;
+  } catch (error) {
+    console.error('Error checking calendar availability:', error);
+    return false; // Asumir no disponible en caso de error
+  }
+}
+
+// Función para crear evento en Google Calendar
+async function createCalendarEvent(tenantId, eventDetails) {
+  try {
+    const calendarConfig = await getGoogleCalendarToken(tenantId);
+    const { access_token, calendar_id } = calendarConfig;
+    
+    if (!access_token || !calendar_id) {
+      throw new Error('Calendar access token or calendar ID not configured');
+    }
+    
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${calendar_id}/events`;
+    
+    const event = {
+      summary: eventDetails.summary,
+      description: eventDetails.description,
+      start: {
+        dateTime: eventDetails.startDateTime,
+        timeZone: eventDetails.timeZone || 'Europe/Madrid'
+      },
+      end: {
+        dateTime: eventDetails.endDateTime,
+        timeZone: eventDetails.timeZone || 'Europe/Madrid'
+      },
+      attendees: eventDetails.attendees || []
+    };
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(event)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Calendar API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    return {
+      success: true,
+      eventId: result.id,
+      eventLink: result.htmlLink
+    };
+  } catch (error) {
+    console.error('Error creating calendar event:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Función para cancelar evento en Google Calendar
+async function cancelCalendarEvent(tenantId, eventId) {
+  try {
+    const calendarConfig = await getGoogleCalendarToken(tenantId);
+    const { access_token, calendar_id } = calendarConfig;
+    
+    if (!access_token || !calendar_id) {
+      throw new Error('Calendar access token or calendar ID not configured');
+    }
+    
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${calendar_id}/events/${eventId}`;
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${access_token}`
+      }
+    });
+    
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`Calendar API error: ${response.status}`);
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error canceling calendar event:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ==================== APPOINTMENT MANAGEMENT ====================
+
+// Función para crear hold temporal de slot
+async function createAppointmentHold(tenantId, customerPhone, serviceId, startDateTime, endDateTime) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured');
+    }
+    
+    // Crear hold temporal (5 minutos)
+    const holdExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    
+    const holdData = {
+      tenant_id: tenantId,
+      customer_phone: customerPhone,
+      service_id: serviceId,
+      appointment_date: startDateTime,
+      start_time: startDateTime,
+      end_time: endDateTime,
+      status: 'hold',
+      hold_expires_at: holdExpiresAt,
+      created_at: new Date().toISOString()
+    };
+    
+    const response = await fetch(`${supabaseUrl}/rest/v1/appointments`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(holdData)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Database error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    return {
+      success: true,
+      appointmentId: result[0].id,
+      holdExpiresAt
+    };
+  } catch (error) {
+    console.error('Error creating appointment hold:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Función para confirmar cita
+async function confirmAppointment(appointmentId, customerData) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured');
+    }
+    
+    // Primero, obtener datos de la cita
+    const appointmentResponse = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointmentId}&select=*,services(*)`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!appointmentResponse.ok) {
+      throw new Error('Error fetching appointment');
+    }
+    
+    const appointments = await appointmentResponse.json();
+    if (appointments.length === 0) {
+      throw new Error('Appointment not found');
+    }
+    
+    const appointment = appointments[0];
+    
+    // Verificar que el hold no haya expirado
+    if (new Date() > new Date(appointment.hold_expires_at)) {
+      throw new Error('Hold has expired');
+    }
+    
+    // Crear/actualizar cliente
+    const customerResponse = await fetch(`${supabaseUrl}/rest/v1/customers`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        tenant_id: appointment.tenant_id,
+        phone_number: customerData.phone,
+        name: customerData.name,
+        created_at: new Date().toISOString()
+      })
+    });
+    
+    let customerId;
+    if (customerResponse.ok) {
+      const customerResult = await customerResponse.json();
+      customerId = customerResult[0].id;
+    } else {
+      // Cliente ya existe, buscarlo
+      const existingCustomerResponse = await fetch(`${supabaseUrl}/rest/v1/customers?tenant_id=eq.${appointment.tenant_id}&phone_number=eq.${customerData.phone}`, {
+        method: 'GET',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (existingCustomerResponse.ok) {
+        const existingCustomers = await existingCustomerResponse.json();
+        if (existingCustomers.length > 0) {
+          customerId = existingCustomers[0].id;
+        }
+      }
+    }
+    
+    // Crear evento en Google Calendar
+    const eventDetails = {
+      summary: `${appointment.services.name} - ${customerData.name}`,
+      description: `Servicio: ${appointment.services.name}\nCliente: ${customerData.name}\nTeléfono: ${customerData.phone}`,
+      startDateTime: appointment.start_time,
+      endDateTime: appointment.end_time
+    };
+    
+    const calendarResult = await createCalendarEvent(appointment.tenant_id, eventDetails);
+    
+    if (!calendarResult.success) {
+      throw new Error(`Calendar error: ${calendarResult.error}`);
+    }
+    
+    // Actualizar cita a confirmada
+    const updateData = {
+      customer_id: customerId,
+      status: 'confirmed',
+      calendar_event_id: calendarResult.eventId,
+      confirmed_at: new Date().toISOString()
+    };
+    
+    const updateResponse = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointmentId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(updateData)
+    });
+    
+    if (!updateResponse.ok) {
+      throw new Error('Error updating appointment');
+    }
+    
+    return {
+      success: true,
+      appointmentId,
+      calendarEventId: calendarResult.eventId,
+      eventLink: calendarResult.eventLink
+    };
+  } catch (error) {
+    console.error('Error confirming appointment:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Función para generar slots disponibles
+async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
+  try {
+    const service = tenantConfig.services.find(s => s.id === parseInt(serviceId));
+    if (!service) {
+      throw new Error('Service not found');
+    }
+    
+    const duration = service.duration_minutes || 30;
+    const requestedDateObj = new Date(requestedDate);
+    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][requestedDateObj.getDay()];
+    
+    const businessHours = tenantConfig.business_hours?.[dayOfWeek];
+    if (!businessHours || businessHours.closed) {
+      return { success: false, error: 'Business closed on this day' };
+    }
+    
+    const openTime = businessHours.open;
+    const closeTime = businessHours.close;
+    
+    // Generar slots cada 30 minutos
+    const slots = [];
+    const startHour = parseInt(openTime.split(':')[0]);
+    const startMinute = parseInt(openTime.split(':')[1]);
+    const endHour = parseInt(closeTime.split(':')[0]);
+    const endMinute = parseInt(closeTime.split(':')[1]);
+    
+    let currentTime = new Date(requestedDateObj);
+    currentTime.setHours(startHour, startMinute, 0, 0);
+    
+    const endTime = new Date(requestedDateObj);
+    endTime.setHours(endHour, endMinute, 0, 0);
+    
+    while (currentTime < endTime) {
+      const slotEnd = new Date(currentTime.getTime() + duration * 60000);
+      
+      // Verificar que el slot termine antes del cierre
+      if (slotEnd <= endTime) {
+        // Verificar disponibilidad en calendario
+        const isAvailable = await checkCalendarAvailability(
+          tenantConfig.id,
+          currentTime.toISOString(),
+          slotEnd.toISOString()
+        );
+        
+        if (isAvailable) {
+          slots.push({
+            startTime: currentTime.toISOString(),
+            endTime: slotEnd.toISOString(),
+            displayTime: currentTime.toLocaleTimeString('es-ES', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'Europe/Madrid'
+            })
+          });
+        }
+      }
+      
+      // Avanzar 30 minutos
+      currentTime = new Date(currentTime.getTime() + 30 * 60000);
+    }
+    
+    return {
+      success: true,
+      slots: slots.slice(0, 5) // Máximo 5 slots
+    };
+  } catch (error) {
+    console.error('Error generating available slots:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 // Función para enviar mensaje de WhatsApp

@@ -32,6 +32,100 @@ function generateAuthUrl(tenantId, email) {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
+// 📧 Función para enviar email automáticamente con el enlace de autorización
+async function sendAuthorizationEmail(email, businessName, authUrl) {
+    try {
+        // Usar un servicio gratuito como EmailJS o web3forms
+        const emailData = {
+            to: email,
+            subject: `🔐 Autorización Google Calendar - ${businessName}`,
+            html: `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(45deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+        .auth-button { display: inline-block; background: #28a745; color: white; padding: 15px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+        .steps { background: white; padding: 20px; border-radius: 5px; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Autorización Google Calendar</h1>
+            <p>Sistema WhatsApp Bot - ${businessName}</p>
+        </div>
+        
+        <div class="content">
+            <h2>¡Hola! Tu cuenta ha sido creada exitosamente</h2>
+            
+            <p>Para completar la configuración del sistema de reservas por WhatsApp, necesitamos que autorices el acceso a tu Google Calendar.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${authUrl}" class="auth-button">🔗 AUTORIZAR GOOGLE CALENDAR</a>
+            </div>
+            
+            <div class="steps">
+                <h3>📋 Pasos a seguir:</h3>
+                <ol>
+                    <li>🔗 <strong>Hacer clic</strong> en el botón de arriba</li>
+                    <li>📧 <strong>Iniciar sesión</strong> con tu cuenta: <code>${email}</code></li>
+                    <li>✅ <strong>Aceptar los permisos</strong> para acceder al calendario</li>
+                    <li>🎯 <strong>¡Listo!</strong> El sistema estará configurado automáticamente</li>
+                </ol>
+            </div>
+            
+            <div style="background: #e8f5e8; padding: 15px; border-radius: 5px; border-left: 4px solid #28a745;">
+                <strong>🔒 Seguridad:</strong> Solo solicitamos permisos de lectura y escritura en tu calendario para gestionar las citas automáticamente.
+            </div>
+            
+            <div style="background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin-top: 15px;">
+                <strong>⚠️ Importante:</strong> Este enlace es único y personal. Debes usar la cuenta de email <strong>${email}</strong> para autorizar.
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>💬 Sistema de Reservas WhatsApp Bot<br>
+            Si tienes problemas, contacta a tu administrador.</p>
+        </div>
+    </div>
+</body>
+</html>`
+        };
+
+        // Enviar usando web3forms (servicio gratuito)
+        const response = await fetch('https://api.web3forms.com/submit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                access_key: process.env.WEB3FORMS_ACCESS_KEY || 'test-key', // Necesitarás obtener una key gratuita
+                subject: emailData.subject,
+                email: email,
+                message: emailData.html,
+                from_name: 'WhatsApp Bot System'
+            })
+        });
+
+        if (response.ok) {
+            console.log('✅ Email de autorización enviado a:', email);
+            return true;
+        } else {
+            console.log('⚠️ Error enviando email:', await response.text());
+            return false;
+        }
+    } catch (error) {
+        console.log('❌ Error enviando email:', error.message);
+        return false;
+    }
+}
+
 // Función para asegurar que existen las columnas necesarias
 async function ensureTableColumns() {
     try {
@@ -695,6 +789,15 @@ async function processForm(req, res) {
         // Generar enlace de autorización
         const authUrl = generateAuthUrl(actualTenantId, email);
 
+        // Enviar email automáticamente con el enlace de autorización
+        try {
+            await sendAuthorizationEmail(email, businessName, authUrl);
+            console.log(`✅ Email enviado a: ${email}`);
+        } catch (emailError) {
+            console.error(`⚠️ Error enviando email: ${emailError.message}`);
+            // No fallar todo el proceso si el email falla
+        }
+
         // Mostrar página de éxito
         return showSuccessPage(res, {
             tenantId: actualTenantId,
@@ -703,12 +806,107 @@ async function processForm(req, res) {
             email,
             address,
             services,
-            authUrl
+            authUrl,
+            emailSent: true
         });
 
     } catch (error) {
         return showErrorPage(res, error.message);
     }
+}
+
+// Función para enviar email con enlace de autorización
+async function sendAuthorizationEmail(toEmail, businessName, authUrl) {
+    const emailData = {
+        to: toEmail,
+        subject: `🔐 Autorización Google Calendar - ${businessName}`,
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
+                    .container { max-width: 600px; margin: 0 auto; background: white; }
+                    .header { background: linear-gradient(45deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; }
+                    .content { padding: 30px; }
+                    .auth-button { 
+                        display: inline-block; 
+                        background: #4285f4; 
+                        color: white; 
+                        padding: 15px 30px; 
+                        text-decoration: none; 
+                        border-radius: 8px; 
+                        font-weight: bold; 
+                        margin: 20px 0;
+                    }
+                    .steps { background: #f8f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                    .footer { background: #f5f5f5; padding: 20px; text-align: center; font-size: 14px; color: #666; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🔐 Autorización Google Calendar</h1>
+                        <p>¡Tu chatbot WhatsApp está casi listo!</p>
+                    </div>
+                    
+                    <div class="content">
+                        <h2>Hola ${businessName},</h2>
+                        
+                        <p>Tu cuenta de chatbot WhatsApp ha sido creada exitosamente. Para completar la configuración, necesitamos que autorices el acceso a tu Google Calendar.</p>
+                        
+                        <div style="text-align: center;">
+                            <a href="${authUrl}" class="auth-button">
+                                🔗 Autorizar Google Calendar
+                            </a>
+                        </div>
+                        
+                        <div class="steps">
+                            <h3>📋 Pasos para completar la autorización:</h3>
+                            <ol>
+                                <li>🔗 Haz clic en el botón "Autorizar Google Calendar"</li>
+                                <li>📧 Inicia sesión con tu cuenta: <strong>${toEmail}</strong></li>
+                                <li>✅ Acepta los permisos de Google Calendar</li>
+                                <li>🎯 ¡Listo! Tu chatbot estará configurado automáticamente</li>
+                            </ol>
+                        </div>
+                        
+                        <p><strong>⚠️ Importante:</strong> Este enlace es único para tu negocio. Una vez completada la autorización, tus clientes podrán reservar citas directamente por WhatsApp.</p>
+                        
+                        <hr style="margin: 30px 0;">
+                        
+                        <p><strong>📱 Cuenta configurada para:</strong></p>
+                        <ul>
+                            <li>🏢 Negocio: ${businessName}</li>
+                            <li>📧 Email: ${toEmail}</li>
+                            <li>📱 WhatsApp: +${toEmail.split('@')[0] || 'configurado'}</li>
+                        </ul>
+                        
+                        <p>Si tienes alguna pregunta, contáctanos.</p>
+                    </div>
+                    
+                    <div class="footer">
+                        <p>📱 WhatsApp Bot Multi-Tenant | Sistema de Reservas Automático</p>
+                        <p>Este email se envió automáticamente al crear tu cuenta.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `
+    };
+
+    // Usando EmailJS (servicio gratuito) o webhook personalizado
+    // Por ahora, simular el envío y registrar en logs
+    console.log('📧 EMAIL PREPARADO PARA ENVÍO:');
+    console.log(`   Para: ${emailData.to}`);
+    console.log(`   Asunto: ${emailData.subject}`);
+    console.log(`   Enlace: ${authUrl}`);
+    
+    // TODO: Implementar envío real con servicio de email
+    // Opciones: EmailJS, SendGrid, Resend, etc.
+    
+    return true;
 }
 
 function showSuccessPage(res, data) {

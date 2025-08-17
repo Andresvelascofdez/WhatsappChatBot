@@ -765,10 +765,20 @@ Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
     }
     
     // Verificar si el horario solicitado está disponible
+    console.log(`🔍 Buscando slot para ${hour}:${minute}. Slots disponibles:`, slotsResult.slots.map(slot => {
+      const slotStart = new Date(slot.startTime);
+      return `${slotStart.getHours()}:${slotStart.getMinutes().toString().padStart(2, '0')} (${slot.displayTime})`;
+    }));
+    
     const requestedSlot = slotsResult.slots.find(slot => {
       const slotStart = new Date(slot.startTime);
-      return slotStart.getHours() === parseInt(hour) && slotStart.getMinutes() === parseInt(minute);
+      const slotHour = slotStart.getHours();
+      const slotMinute = slotStart.getMinutes();
+      console.log(`🔍 Comparando slot ${slotHour}:${slotMinute.toString().padStart(2, '0')} con solicitado ${hour}:${minute}`);
+      return slotHour === parseInt(hour) && slotMinute === parseInt(minute);
     });
+    
+    console.log(`🔍 Slot encontrado:`, requestedSlot ? 'SÍ' : 'NO');
     
     if (!requestedSlot) {
       let availableSlotsText = '';
@@ -1064,7 +1074,8 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
     const { access_token, calendar_id } = calendarConfig;
     
     if (!access_token || !calendar_id) {
-      throw new Error('Calendar access token or calendar ID not configured');
+      console.log(`⚠️ Calendar not configured for tenant ${tenantId}, assuming available`);
+      return true; // Si no hay calendario configurado, asumir disponible
     }
     
     const url = `https://www.googleapis.com/calendar/v3/freeBusy`;
@@ -1085,17 +1096,21 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
     });
     
     if (!response.ok) {
-      throw new Error(`Calendar API error: ${response.status}`);
+      console.log(`⚠️ Calendar API error for tenant ${tenantId}: ${response.status}, assuming available`);
+      return true; // En caso de error de API, asumir disponible
     }
     
     const result = await response.json();
     const busyTimes = result.calendars?.[calendar_id]?.busy || [];
     
     // Si hay conflictos, el slot no está disponible
-    return busyTimes.length === 0;
+    const isAvailable = busyTimes.length === 0;
+    console.log(`📅 Calendar check for ${startDateTime}: ${isAvailable ? 'AVAILABLE' : 'BUSY'} (${busyTimes.length} conflicts)`);
+    return isAvailable;
   } catch (error) {
     console.error('Error checking calendar availability:', error);
-    return false; // Asumir no disponible en caso de error
+    console.log(`⚠️ Calendar error for tenant ${tenantId}, assuming available`);
+    return true; // Asumir disponible en caso de error para no bloquear todas las reservas
   }
 }
 

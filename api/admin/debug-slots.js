@@ -2,6 +2,7 @@
  * 🔍 DIAGNÓSTICO: Investigar por qué no hay slots disponibles
  * 
  * URL: /api/admin/debug-slots
+ * Versión: 1.1 - Forzar redeploy
  */
 
 const { createClient } = require('@supabase/supabase-js');

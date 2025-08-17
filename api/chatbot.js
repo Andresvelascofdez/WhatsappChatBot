@@ -1064,9 +1064,94 @@ async function getGoogleCalendarToken(tenantId) {
       throw new Error('No calendar configuration found for tenant');
     }
     
-    return tenants[0].calendar_config;
+    const calendarConfig = tenants[0].calendar_config;
+    
+    // Verificar si el token ha expirado
+    if (calendarConfig.expires_at && new Date() >= new Date(calendarConfig.expires_at)) {
+      console.log(`🔄 Access token expired for tenant ${tenantId}, refreshing...`);
+      const refreshedConfig = await refreshGoogleCalendarToken(tenantId, calendarConfig);
+      return refreshedConfig;
+    }
+    
+    return calendarConfig;
   } catch (error) {
     console.error('Error getting Google Calendar token:', error);
+    throw error;
+  }
+}
+
+// Función para refrescar token de Google Calendar
+async function refreshGoogleCalendarToken(tenantId, currentConfig) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!currentConfig.refresh_token) {
+      throw new Error('No refresh token available for tenant');
+    }
+    
+    console.log(`🔄 Refreshing Google Calendar token for tenant ${tenantId}`);
+    
+    // Hacer solicitud de refresh a Google
+    const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        refresh_token: currentConfig.refresh_token,
+        grant_type: 'refresh_token'
+      })
+    });
+    
+    if (!refreshResponse.ok) {
+      const errorData = await refreshResponse.text();
+      console.error('Error refreshing Google token:', errorData);
+      throw new Error(`Failed to refresh token: ${refreshResponse.status}`);
+    }
+    
+    const tokenData = await refreshResponse.json();
+    
+    // Calcular nueva fecha de expiración (típicamente 1 hora)
+    const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
+    
+    // Actualizar configuración del calendario con el nuevo token
+    const updatedCalendarConfig = {
+      ...currentConfig,
+      access_token: tokenData.access_token,
+      expires_at: expiresAt
+    };
+    
+    // Si Google envía un nuevo refresh_token, actualizar también
+    if (tokenData.refresh_token) {
+      updatedCalendarConfig.refresh_token = tokenData.refresh_token;
+    }
+    
+    // Guardar en base de datos
+    const updateResponse = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${tenantId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        calendar_config: updatedCalendarConfig
+      })
+    });
+    
+    if (!updateResponse.ok) {
+      console.error('Error updating calendar config in database');
+      throw new Error('Failed to save refreshed token');
+    }
+    
+    console.log(`✅ Google Calendar token refreshed successfully for tenant ${tenantId}`);
+    return updatedCalendarConfig;
+    
+  } catch (error) {
+    console.error('Error refreshing Google Calendar token:', error);
     throw error;
   }
 }
@@ -1113,7 +1198,37 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
     });
     
     if (!response.ok) {
-      console.log(`❌ Calendar API error for tenant ${tenantId}: ${response.status} - assuming available`);
+      const errorText = await response.text();
+      console.log(`❌ Calendar API error for tenant ${tenantId}: ${response.status} - ${errorText}`);
+      
+      // Si es error 401 (Unauthorized), intentar refrescar token una vez más
+      if (response.status === 401) {
+        console.log(`🔄 Attempting to refresh expired token for tenant ${tenantId}`);
+        try {
+          const refreshedConfig = await refreshGoogleCalendarToken(tenantId, calendarConfig);
+          
+          // Reintentar la consulta con el token refrescado
+          const retryResponse = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${refreshedConfig.access_token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+          });
+          
+          if (retryResponse.ok) {
+            const retryResult = await retryResponse.json();
+            const busyTimes = retryResult.calendars?.[refreshedConfig.calendar_id]?.busy || [];
+            const isAvailable = busyTimes.length === 0;
+            console.log(`📅 Calendar result (after refresh) for ${startDateTime}: ${isAvailable ? 'AVAILABLE' : 'BUSY'} (${busyTimes.length} conflicts)`, busyTimes);
+            return isAvailable;
+          }
+        } catch (refreshError) {
+          console.error('Failed to refresh token and retry:', refreshError);
+        }
+      }
+      
       return true; // En caso de error de API, asumir disponible
     }
     
@@ -1133,11 +1248,26 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
 // Función para crear evento en Google Calendar
 async function createCalendarEvent(tenantId, eventDetails) {
   try {
+    // Para tenant por defecto, no crear evento en calendario
+    if (tenantId === 'default') {
+      console.log(`📅 Default tenant - skipping calendar event creation`);
+      return {
+        success: true,
+        eventId: 'default-event',
+        eventLink: 'No calendar configured'
+      };
+    }
+    
     const calendarConfig = await getGoogleCalendarToken(tenantId);
     const { access_token, calendar_id } = calendarConfig;
     
     if (!access_token || !calendar_id) {
-      throw new Error('Calendar access token or calendar ID not configured');
+      console.log(`⚠️ Calendar not configured for tenant ${tenantId} - skipping event creation`);
+      return {
+        success: true,
+        eventId: 'no-calendar',
+        eventLink: 'Calendar not configured'
+      };
     }
     
     const url = `https://www.googleapis.com/calendar/v3/calendars/${calendar_id}/events`;
@@ -1156,6 +1286,8 @@ async function createCalendarEvent(tenantId, eventDetails) {
       attendees: eventDetails.attendees || []
     };
     
+    console.log(`📅 Creating calendar event for tenant ${tenantId}:`, event.summary);
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -1166,10 +1298,44 @@ async function createCalendarEvent(tenantId, eventDetails) {
     });
     
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Calendar API error creating event: ${response.status} - ${errorText}`);
+      
+      // Si es error 401 (Unauthorized), intentar refrescar token
+      if (response.status === 401) {
+        console.log(`🔄 Attempting to refresh expired token for event creation`);
+        try {
+          const refreshedConfig = await refreshGoogleCalendarToken(tenantId, calendarConfig);
+          
+          // Reintentar la creación con el token refrescado
+          const retryResponse = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${refreshedConfig.access_token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(event)
+          });
+          
+          if (retryResponse.ok) {
+            const retryResult = await retryResponse.json();
+            console.log(`✅ Calendar event created successfully (after refresh): ${retryResult.id}`);
+            return {
+              success: true,
+              eventId: retryResult.id,
+              eventLink: retryResult.htmlLink
+            };
+          }
+        } catch (refreshError) {
+          console.error('Failed to refresh token for event creation:', refreshError);
+        }
+      }
+      
       throw new Error(`Calendar API error: ${response.status}`);
     }
     
     const result = await response.json();
+    console.log(`✅ Calendar event created successfully: ${result.id}`);
     return {
       success: true,
       eventId: result.id,

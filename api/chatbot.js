@@ -756,7 +756,7 @@ Intenta con una fecha futura: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`
     const endDateTime = new Date(requestedDateTime.getTime() + (service.duration_minutes || 30) * 60000);
     
     // Generar slots disponibles para ese día
-    const slotsResult = await generateAvailableSlots(tenantConfig, service.id, requestedDate.toISOString());
+    const slotsResult = await generateAvailableSlots(tenantConfig, service.id, `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
     
     if (!slotsResult.success) {
       return `❌ *${slotsResult.error}*
@@ -765,20 +765,23 @@ Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
     }
     
     // Verificar si el horario solicitado está disponible
-    console.log(`🔍 Buscando slot para ${hour}:${minute}. Slots disponibles:`, slotsResult.slots.map(slot => {
+    console.log(`🔍 Buscando slot para ${hour}:${minute.padStart(2, '0')}. Slots disponibles:`, slotsResult.slots.map(slot => {
       const slotStart = new Date(slot.startTime);
-      return `${slotStart.getHours()}:${slotStart.getMinutes().toString().padStart(2, '0')} (${slot.displayTime})`;
+      return `${slotStart.getHours()}:${slotStart.getMinutes().toString().padStart(2, '0')} (display: ${slot.displayTime})`;
     }));
     
     const requestedSlot = slotsResult.slots.find(slot => {
       const slotStart = new Date(slot.startTime);
       const slotHour = slotStart.getHours();
       const slotMinute = slotStart.getMinutes();
-      console.log(`🔍 Comparando slot ${slotHour}:${slotMinute.toString().padStart(2, '0')} con solicitado ${hour}:${minute}`);
-      return slotHour === parseInt(hour) && slotMinute === parseInt(minute);
+      const requestedHour = parseInt(hour);
+      const requestedMinute = parseInt(minute);
+      
+      console.log(`🔍 Comparando slot ${slotHour}:${slotMinute.toString().padStart(2, '0')} con solicitado ${requestedHour}:${requestedMinute.toString().padStart(2, '0')}`);
+      return slotHour === requestedHour && slotMinute === requestedMinute;
     });
     
-    console.log(`🔍 Slot encontrado:`, requestedSlot ? 'SÍ' : 'NO');
+    console.log(`🔍 Slot encontrado:`, requestedSlot ? `SÍ - ${requestedSlot.displayTime}` : 'NO');
     
     if (!requestedSlot) {
       let availableSlotsText = '';
@@ -1074,8 +1077,8 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
     const { access_token, calendar_id } = calendarConfig;
     
     if (!access_token || !calendar_id) {
-      console.log(`⚠️ Calendar not configured for tenant ${tenantId}, assuming available`);
-      return true; // Si no hay calendario configurado, asumir disponible
+      console.log(`⚠️ Calendar not configured for tenant ${tenantId}`);
+      throw new Error('Calendar access token or calendar ID not configured');
     }
     
     const url = `https://www.googleapis.com/calendar/v3/freeBusy`;
@@ -1085,6 +1088,13 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
       timeMax: endDateTime,
       items: [{ id: calendar_id }]
     };
+    
+    console.log(`📅 Checking calendar availability:`, {
+      tenant: tenantId,
+      startDateTime,
+      endDateTime,
+      calendarId: calendar_id
+    });
     
     const response = await fetch(url, {
       method: 'POST',
@@ -1096,8 +1106,8 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
     });
     
     if (!response.ok) {
-      console.log(`⚠️ Calendar API error for tenant ${tenantId}: ${response.status}, assuming available`);
-      return true; // En caso de error de API, asumir disponible
+      console.log(`❌ Calendar API error for tenant ${tenantId}: ${response.status}`);
+      throw new Error(`Calendar API error: ${response.status}`);
     }
     
     const result = await response.json();
@@ -1105,12 +1115,11 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
     
     // Si hay conflictos, el slot no está disponible
     const isAvailable = busyTimes.length === 0;
-    console.log(`📅 Calendar check for ${startDateTime}: ${isAvailable ? 'AVAILABLE' : 'BUSY'} (${busyTimes.length} conflicts)`);
+    console.log(`📅 Calendar result for ${startDateTime}: ${isAvailable ? 'AVAILABLE' : 'BUSY'} (${busyTimes.length} conflicts)`, busyTimes);
     return isAvailable;
   } catch (error) {
     console.error('Error checking calendar availability:', error);
-    console.log(`⚠️ Calendar error for tenant ${tenantId}, assuming available`);
-    return true; // Asumir disponible en caso de error para no bloquear todas las reservas
+    return false; // En caso de error, no permitir la reserva
   }
 }
 
@@ -1383,7 +1392,19 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
       throw new Error('Service not found');
     }
     
-    const requestedDateObj = new Date(requestedDate);
+    // Crear fecha usando formato YYYY-MM-DD para evitar problemas de zona horaria
+    let requestedDateObj;
+    if (requestedDate.includes('-')) {
+      // Formato YYYY-MM-DD
+      const [year, month, day] = requestedDate.split('-');
+      requestedDateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    } else {
+      // Fallback para ISO string
+      requestedDateObj = new Date(requestedDate);
+    }
+    
+    console.log(`📅 Processing date: ${requestedDate} -> ${requestedDateObj.toDateString()}`);
+    
     const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][requestedDateObj.getDay()];
     
     // Obtener configuración de slots del tenant
@@ -1440,8 +1461,7 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
             endTime: slotEnd.toISOString(),
             displayTime: currentTime.toLocaleTimeString('es-ES', { 
               hour: '2-digit', 
-              minute: '2-digit',
-              timeZone: 'Europe/Madrid'
+              minute: '2-digit'
             }),
             serviceDuration
           });

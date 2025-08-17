@@ -32,18 +32,7 @@ function generateAuthUrl(tenantId, email) {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-module.exports = async function handler(req, res) {
-    // Solo permitir GET (mostrar formulario) y POST (procesar formulario)
-    if (req.method === 'GET') {
-        return showForm(res);
-    }
-    
-    if (req.method === 'POST') {
-        return processForm(req, res);
-    }
-
-    return res.status(405).json({ error: 'Method not allowed' });
-}
+// Handler principal - se exporta al final del archivo
 
 function showForm(res) {
     const html = `
@@ -793,4 +782,18 @@ function showErrorPage(res, errorMessage) {
 
     res.setHeader('Content-Type', 'text/html');
     res.status(400).send(html);
+}
+
+// Handler principal exportado
+module.exports = async function handler(req, res) {
+    // Solo permitir GET (mostrar formulario) y POST (procesar formulario)
+    if (req.method === 'GET') {
+        return showForm(res);
+    }
+    
+    if (req.method === 'POST') {
+        return processForm(req, res);
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
 }

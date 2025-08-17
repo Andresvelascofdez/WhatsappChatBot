@@ -662,7 +662,7 @@ Te ayudaré a resolver cualquier duda sobre nuestros servicios.`;
 
 🏪 *${businessName}*
 📍 Dirección: ${tenantConfig.address || 'Dirección no disponible'}
-📞 Teléfono: +${tenantConfig.phone_number}
+📞 Teléfono: +${tenantConfig.phone}
 ${tenantConfig.email ? `📧 Email: ${tenantConfig.email}\n` : ''}
 🕒 *Horarios de Atención*
 ${getBusinessHoursText(tenantConfig.business_hours)}
@@ -981,8 +981,17 @@ Intenta de nuevo en unos momentos.`;
 
 // Función auxiliar para formatear horarios de negocio
 function getBusinessHoursText(businessHours) {
+  // Si no hay horarios, usar horarios por defecto
   if (!businessHours) {
-    return '📅 *Consulta horarios*: Contacta directamente';
+    businessHours = {
+      monday: { open: '09:00', close: '18:00', closed: false },
+      tuesday: { open: '09:00', close: '18:00', closed: false },
+      wednesday: { open: '09:00', close: '18:00', closed: false },
+      thursday: { open: '09:00', close: '18:00', closed: false },
+      friday: { open: '09:00', close: '18:00', closed: false },
+      saturday: { open: '09:00', close: '14:00', closed: false },
+      sunday: { open: '09:00', close: '18:00', closed: true }
+    };
   }
   
   const days = {
@@ -1353,8 +1362,9 @@ async function confirmAppointment(appointmentId, customerData) {
 // Función para generar slots disponibles
 async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
   try {
-    const service = tenantConfig.services.find(s => s.id === parseInt(serviceId));
+    const service = tenantConfig.services.find(s => s.id === serviceId);
     if (!service) {
+      console.log(`Service not found. ServiceId: ${serviceId}, Available services:`, tenantConfig.services.map(s => ({id: s.id, name: s.name})));
       throw new Error('Service not found');
     }
     

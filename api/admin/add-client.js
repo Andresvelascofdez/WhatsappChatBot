@@ -653,16 +653,14 @@ async function processForm(req, res) {
             dynamic_slots: true // Indica que usa duración de servicio, no slots fijos
         };
 
-        // Crear tenant en base de datos (ajustado a schema real)
+        // Crear tenant en base de datos (usando nombres reales del schema)
         const { data: tenantData, error: tenantError } = await supabase
             .from('tenants')
             .insert([{
                 id: tenantId,
-                name: businessName,
-                phone_masked: phoneNumber,
-                tz: timezone,
-                locale: 'es',
-                active: true,
+                business_name: businessName,  // Schema original usa 'business_name'
+                phone_number: phoneNumber,    // Schema original usa 'phone_number'
+                address: address,
                 email: email,
                 slot_config: slotConfig
             }])

@@ -7,7 +7,7 @@
  * URL: /api/oauth/google/callback
  */
 
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
 // Configuración de Supabase
 const supabase = createClient(
@@ -22,7 +22,7 @@ const REDIRECT_URI = process.env.VERCEL_URL ?
     `https://${process.env.VERCEL_URL}/api/oauth/google/callback` : 
     'https://tu-app.vercel.app/api/oauth/google/callback';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     console.log('🔄 Google OAuth Callback recibido');
 
     if (req.method !== 'GET') {

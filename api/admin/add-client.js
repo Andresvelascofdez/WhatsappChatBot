@@ -5,7 +5,7 @@
  * URL: /admin/add-client
  */
 
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
 // Configuración
 const supabase = createClient(
@@ -16,7 +16,7 @@ const supabase = createClient(
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const REDIRECT_URI = process.env.VERCEL_URL ? 
     `https://${process.env.VERCEL_URL}/api/oauth/google/callback` : 
-    'https://tu-app.vercel.app/api/oauth/google/callback';
+    'https://whatsapp-chat-bot-xi.vercel.app/api/oauth/google/callback';
 
 function generateAuthUrl(tenantId, email) {
     const params = new URLSearchParams({
@@ -32,7 +32,7 @@ function generateAuthUrl(tenantId, email) {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     // Solo permitir GET (mostrar formulario) y POST (procesar formulario)
     if (req.method === 'GET') {
         return showForm(res);

@@ -95,3 +95,4 @@ temp/
 *TestData*
 .*.swp
 .vercel
+.env*.local

@@ -1,5 +1,3 @@
-export * from './webhook';
-export * from './router';
-export * from './handlers';
-export * from './middleware';
-export * from './config';
+// Proyecto usando api/chatbot.js para producción
+// Esta arquitectura TypeScript es para desarrollo futuro
+export {};

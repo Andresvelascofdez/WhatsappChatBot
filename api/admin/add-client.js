@@ -373,20 +373,15 @@ function showForm(res) {
                     <div class="service-item">
                         <div class="form-group">
                             <label>Nombre del Servicio *</label>
-                            <input type="text" name="serviceName[]" required placeholder="ej: Corte Clásico">
+                            <input type="text" name="serviceName[]" required placeholder="ej: Corte Clásico" style="font-size: 1.1rem; padding: 12px;">
                         </div>
                         <div class="form-group">
                             <label>Precio (€) *</label>
-                            <input type="number" name="servicePrice[]" required step="0.01" min="0" placeholder="25.00">
+                            <input type="number" name="servicePrice[]" required step="0.01" min="0" placeholder="25.00" style="font-size: 1.1rem; padding: 12px;">
                         </div>
                         <div class="form-group">
                             <label>Duración (min) *</label>
-                            <input type="number" name="serviceDuration[]" required min="5" max="480" placeholder="30">
-                        </div>
-                        <div class="form-group">
-                            <label>Buffer extra (min)</label>
-                            <input type="number" name="serviceBuffer[]" min="0" max="60" placeholder="0" value="0">
-                            <small style="color: #666; font-size: 0.8rem;">Tiempo extra entre este servicio y el siguiente</small>
+                            <input type="number" name="serviceDuration[]" required min="5" max="480" placeholder="30" style="font-size: 1.1rem; padding: 12px;">
                         </div>
                         <button type="button" class="btn btn-danger" onclick="removeService(this)">🗑️</button>
                     </div>
@@ -477,20 +472,15 @@ function showForm(res) {
             serviceItem.innerHTML = \`
                 <div class="form-group">
                     <label>Nombre del Servicio *</label>
-                    <input type="text" name="serviceName[]" required placeholder="ej: Corte + Barba">
+                    <input type="text" name="serviceName[]" required placeholder="ej: Corte + Barba" style="font-size: 1.1rem; padding: 12px;">
                 </div>
                 <div class="form-group">
                     <label>Precio (€) *</label>
-                    <input type="number" name="servicePrice[]" required step="0.01" min="0" placeholder="35.00">
+                    <input type="number" name="servicePrice[]" required step="0.01" min="0" placeholder="35.00" style="font-size: 1.1rem; padding: 12px;">
                 </div>
                 <div class="form-group">
                     <label>Duración (min) *</label>
-                    <input type="number" name="serviceDuration[]" required min="5" max="480" placeholder="45">
-                </div>
-                <div class="form-group">
-                    <label>Buffer extra (min)</label>
-                    <input type="number" name="serviceBuffer[]" min="0" max="60" placeholder="0" value="0">
-                    <small style="color: #666; font-size: 0.8rem;">Tiempo extra entre este servicio y el siguiente</small>
+                    <input type="number" name="serviceDuration[]" required min="5" max="480" placeholder="45" style="font-size: 1.1rem; padding: 12px;">
                 </div>
                 <button type="button" class="btn btn-danger" onclick="removeService(this)">🗑️</button>
             \`;
@@ -619,26 +609,24 @@ async function processForm(req, res) {
         const serviceNames = parsedData['serviceName[]'] || [];
         const servicePrices = parsedData['servicePrice[]'] || [];
         const serviceDurations = parsedData['serviceDuration[]'] || [];
-        const serviceBuffers = parsedData['serviceBuffer[]'] || [];
 
         console.log('=== EXTRACTED DATA ===');
         console.log('Fields:', { tenantId, businessName, phoneNumber, email, address });
-        console.log('Services:', { serviceNames, servicePrices, serviceDurations, serviceBuffers });
+        console.log('Services:', { serviceNames, servicePrices, serviceDurations });
 
         // Asegurarse de que los servicios sean arrays
         const serviceNamesArray = Array.isArray(serviceNames) ? serviceNames : (serviceNames ? [serviceNames] : []);
         const servicePricesArray = Array.isArray(servicePrices) ? servicePrices : (servicePrices ? [servicePrices] : []);
         const serviceDurationsArray = Array.isArray(serviceDurations) ? serviceDurations : (serviceDurations ? [serviceDurations] : []);
-        const serviceBuffersArray = Array.isArray(serviceBuffers) ? serviceBuffers : (serviceBuffers ? [serviceBuffers] : []);
 
-        console.log('Arrays normalized:', { serviceNamesArray, servicePricesArray, serviceDurationsArray, serviceBuffersArray });
+        console.log('Arrays normalized:', { serviceNamesArray, servicePricesArray, serviceDurationsArray });
 
         const services = serviceNamesArray.map((name, index) => ({
             name: name,
             price_cents: Math.round(parseFloat(servicePricesArray[index] || 0) * 100),
             duration_min: parseInt(serviceDurationsArray[index] || 30),
             slot_granularity_min: slotGranularity, // Granularidad mínima para cálculos
-            buffer_min: parseInt(serviceBuffersArray[index] || 0), // Buffer específico por servicio
+            buffer_min: 0, // Sin buffer por defecto
             is_active: true
         }));
 

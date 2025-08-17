@@ -12,8 +12,8 @@
     "start": "node api/index.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.55.0",
     "axios": "^1.11.0",
-    "twilio": "^4.19.3",
-    "@supabase/supabase-js": "^2.38.0"
+    "twilio": "^4.19.3"
   }
 }

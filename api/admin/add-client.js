@@ -650,15 +650,18 @@ async function processForm(req, res) {
             dynamic_slots: true // Indica que usa duración de servicio, no slots fijos
         };
 
-        // Crear tenant en base de datos (usando nombres reales del schema)
+        // Crear tenant en base de datos (usando nombres REALES del schema - sin address por ahora)
         const { data: tenantData, error: tenantError } = await supabase
             .from('tenants')
             .insert([{
                 id: tenantId,
-                business_name: businessName,  // Schema original usa 'business_name'
-                phone_number: phoneNumber,    // Schema original usa 'phone_number'
-                address: address,
+                name: businessName,           // Schema real usa 'name'
+                phone: phoneNumber,          // Schema real usa 'phone'
                 email: email,
+                // address: address,         // Campo faltante - comentado temporalmente
+                tz: timezone,
+                locale: 'es',
+                active: true,
                 slot_config: slotConfig
             }])
             .select();
@@ -671,10 +674,11 @@ async function processForm(req, res) {
         const servicesWithTenant = services.map(service => ({
             tenant_id: tenantId,
             name: service.name,
-            description: `Servicio de ${service.name}`, // Campo que existe en schema
-            price: service.price, // Schema usa 'price' en euros como decimal
-            duration_minutes: service.duration_minutes, // Schema usa 'duration_minutes'
-            custom_slot_duration: null // Campo que existe en schema original
+            description: `Servicio de ${service.name}`,
+            price_cents: Math.round(service.price * 100), // Schema usa 'price_cents' como entero
+            duration_min: service.duration_minutes,       // Schema usa 'duration_min'
+            buffer_min: 0,                               // Campo que existe en schema
+            is_active: true                              // Campo que existe en schema
         }));
 
         const { error: servicesError } = await supabase

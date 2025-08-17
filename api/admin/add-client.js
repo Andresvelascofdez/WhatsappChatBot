@@ -528,10 +528,10 @@ async function processForm(req, res) {
         const email = parsedData.email;
         const address = parsedData.address || null;
 
-        // Extraer servicios
-        const serviceNames = parsedData.serviceName || [];
-        const servicePrices = parsedData.servicePrice || [];
-        const serviceDurations = parsedData.serviceDuration || [];
+        // Extraer servicios (los campos llegan con [] en el nombre)
+        const serviceNames = parsedData['serviceName[]'] || [];
+        const servicePrices = parsedData['servicePrice[]'] || [];
+        const serviceDurations = parsedData['serviceDuration[]'] || [];
 
         console.log('=== EXTRACTED DATA ===');
         console.log('Fields:', { tenantId, businessName, phoneNumber, email, address });

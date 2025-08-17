@@ -1216,21 +1216,77 @@ async function createAppointmentHold(tenantId, customerPhone, serviceId, startDa
       throw new Error('Supabase credentials not configured');
     }
     
+    // Crear o buscar customer
+    let customerId = null;
+    
+    // Primero buscar si el customer ya existe
+    const existingCustomerResponse = await fetch(`${supabaseUrl}/rest/v1/customers?tenant_id=eq.${tenantId}&phone_number=eq.${customerPhone}&limit=1`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (existingCustomerResponse.ok) {
+      const existingCustomers = await existingCustomerResponse.json();
+      if (existingCustomers.length > 0) {
+        customerId = existingCustomers[0].id;
+        console.log('📱 Customer encontrado:', customerId);
+      }
+    }
+    
+    // Si no existe, crear nuevo customer
+    if (!customerId) {
+      console.log('📱 Creando nuevo customer...');
+      const customerResponse = await fetch(`${supabaseUrl}/rest/v1/customers`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          phone_number: customerPhone,
+          name: 'Cliente WhatsApp', // Nombre temporal
+          created_at: new Date().toISOString()
+        })
+      });
+      
+      if (customerResponse.ok) {
+        const customerResult = await customerResponse.json();
+        customerId = customerResult[0].id;
+        console.log('📱 Customer creado:', customerId);
+      } else {
+        const errorText = await customerResponse.text();
+        console.log('📱 Error creando customer:', errorText);
+        throw new Error(`Error creating customer: ${customerResponse.status} - ${errorText}`);
+      }
+    }
+    
     // Crear hold temporal (5 minutos)
     const holdExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
     
+    // Extraer solo la fecha de startDateTime para appointment_date
+    const appointmentDate = new Date(startDateTime).toISOString().split('T')[0];
+    
     const holdData = {
       tenant_id: tenantId,
+      customer_id: customerId,
       customer_phone: customerPhone,
       service_id: serviceId,
-      appointment_date: startDateTime,
       start_time: startDateTime,
       end_time: endDateTime,
+      appointment_date: appointmentDate,
       status: 'hold',
       hold_expires_at: holdExpiresAt,
-      slot_metadata: slotMetadata, // Información adicional del slot
-      created_at: new Date().toISOString()
+      slot_metadata: slotMetadata
     };
+    
+    console.log('📝 Creating appointment hold with data:', holdData);
     
     const response = await fetch(`${supabaseUrl}/rest/v1/appointments`, {
       method: 'POST',
@@ -1243,11 +1299,24 @@ async function createAppointmentHold(tenantId, customerPhone, serviceId, startDa
       body: JSON.stringify(holdData)
     });
     
+    console.log('📝 Database response:', response.status, response.statusText);
+    
     if (!response.ok) {
-      throw new Error(`Database error: ${response.status}`);
+      const errorText = await response.text();
+      console.log('📝 Database error details:', errorText);
+      
+      // Intentar parsear el error para más detalles
+      try {
+        const errorData = JSON.parse(errorText);
+        console.log('📝 Parsed error:', errorData);
+        throw new Error(`Database error: ${response.status} - ${errorData.message || errorText}`);
+      } catch (parseError) {
+        throw new Error(`Database error: ${response.status} - ${errorText}`);
+      }
     }
     
     const result = await response.json();
+    console.log('📝 Appointment hold created successfully:', result);
     return {
       success: true,
       appointmentId: result[0].id,

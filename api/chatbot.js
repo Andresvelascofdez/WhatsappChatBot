@@ -305,7 +305,7 @@ async function getTenantByPhoneNumber(phoneNumber) {
     }
     
     // Buscar tenant por número de teléfono
-    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?phone_number=eq.${phoneNumber}`, {
+    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?phone_number=eq.${phoneNumber}&select=*`, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
@@ -329,8 +329,8 @@ async function getTenantByPhoneNumber(phoneNumber) {
     const tenant = tenants[0];
     console.log(`Found tenant: ${tenant.business_name} (ID: ${tenant.id})`);
     
-    // Cargar servicios del tenant
-    const servicesResponse = await fetch(`${supabaseUrl}/rest/v1/services?tenant_id=eq.${tenant.id}`, {
+    // Cargar servicios del tenant con configuraciones de slots
+    const servicesResponse = await fetch(`${supabaseUrl}/rest/v1/services?tenant_id=eq.${tenant.id}&select=*`, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
@@ -387,11 +387,50 @@ function getDefaultTenantConfig() {
       saturday: { open: '09:00', close: '15:00' },
       sunday: { closed: true }
     },
+    slot_config: {
+      default_slot_duration: 30,
+      slot_granularity: 15, // Slots cada 15 minutos
+      buffer_between_appointments: 5,
+      allow_same_day_booking: true,
+      max_advance_booking_days: 30
+    },
     services: [
-      { id: 1, name: 'Corte de pelo', price: 15, duration_minutes: 30 },
-      { id: 2, name: 'Tinte', price: 25, duration_minutes: 60 },
-      { id: 3, name: 'Mechas', price: 35, duration_minutes: 90 },
-      { id: 4, name: 'Corte + Tinte', price: 35, duration_minutes: 90 }
+      { 
+        id: 1, 
+        name: 'Corte de pelo', 
+        price: 15, 
+        duration_minutes: 30,
+        buffer_before_minutes: 5,
+        buffer_after_minutes: 5,
+        custom_slot_duration: null // Usar configuración del tenant
+      },
+      { 
+        id: 2, 
+        name: 'Tinte', 
+        price: 25, 
+        duration_minutes: 60,
+        buffer_before_minutes: 10,
+        buffer_after_minutes: 15,
+        custom_slot_duration: 90 // Slot personalizado más largo
+      },
+      { 
+        id: 3, 
+        name: 'Mechas', 
+        price: 35, 
+        duration_minutes: 90,
+        buffer_before_minutes: 15,
+        buffer_after_minutes: 15,
+        custom_slot_duration: 120 // Slot personalizado más largo
+      },
+      { 
+        id: 4, 
+        name: 'Corte + Tinte', 
+        price: 35, 
+        duration_minutes: 90,
+        buffer_before_minutes: 10,
+        buffer_after_minutes: 15,
+        custom_slot_duration: 120
+      }
     ],
     faqs: [
       {
@@ -732,14 +771,17 @@ Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
     
     // Verificar si el horario solicitado está disponible
     const requestedSlot = slotsResult.slots.find(slot => {
-      const slotStart = new Date(slot.startTime);
-      return slotStart.getHours() === parseInt(hour) && slotStart.getMinutes() === parseInt(minute);
+      const serviceStart = new Date(slot.serviceStart);
+      return serviceStart.getHours() === parseInt(hour) && serviceStart.getMinutes() === parseInt(minute);
     });
     
     if (!requestedSlot) {
       let availableSlotsText = '';
       slotsResult.slots.forEach((slot, index) => {
-        availableSlotsText += `${index + 1}. ${slot.displayTime}\n`;
+        const duration = `${slot.serviceDuration} min`;
+        const bufferInfo = slot.bufferBefore || slot.bufferAfter ? 
+          ` (incluye ${slot.bufferBefore + slot.bufferAfter} min preparación)` : '';
+        availableSlotsText += `${index + 1}. ${slot.displayTime} - ${duration}${bufferInfo}\n`;
       });
       
       if (availableSlotsText === '') {
@@ -752,17 +794,25 @@ Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
 
 ⏰ *Horarios disponibles:*
 ${availableSlotsText}
-Para reservar uno: *reservar ${serviceName} ${dateStr} [hora]*
+💡 *Slots cada ${slotsResult.slotConfig.granularity} min, servicio dura ${slotsResult.slotConfig.serviceDuration} min*
+
+Para reservar: *reservar ${serviceName} ${dateStr} [hora]*
 Ejemplo: *reservar ${serviceName} ${dateStr} ${slotsResult.slots[0]?.displayTime}*`;
     }
     
-    // Crear hold temporal
+    // Crear hold temporal usando el slot completo (con buffers)
     const holdResult = await createAppointmentHold(
       tenantConfig.id,
       phoneNumber,
       service.id,
-      requestedSlot.startTime,
-      requestedSlot.endTime
+      requestedSlot.slotStart,  // Usar slot completo
+      requestedSlot.slotEnd,    // Usar slot completo
+      {
+        serviceStart: requestedSlot.serviceStart,
+        serviceEnd: requestedSlot.serviceEnd,
+        bufferBefore: requestedSlot.bufferBefore,
+        bufferAfter: requestedSlot.bufferAfter
+      }
     );
     
     if (!holdResult.success) {
@@ -1134,7 +1184,7 @@ async function cancelCalendarEvent(tenantId, eventId) {
 // ==================== APPOINTMENT MANAGEMENT ====================
 
 // Función para crear hold temporal de slot
-async function createAppointmentHold(tenantId, customerPhone, serviceId, startDateTime, endDateTime) {
+async function createAppointmentHold(tenantId, customerPhone, serviceId, startDateTime, endDateTime, slotMetadata = {}) {
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -1155,6 +1205,7 @@ async function createAppointmentHold(tenantId, customerPhone, serviceId, startDa
       end_time: endDateTime,
       status: 'hold',
       hold_expires_at: holdExpiresAt,
+      slot_metadata: slotMetadata, // Información adicional del slot
       created_at: new Date().toISOString()
     };
     
@@ -1317,7 +1368,6 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
       throw new Error('Service not found');
     }
     
-    const duration = service.duration_minutes || 30;
     const requestedDateObj = new Date(requestedDate);
     const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][requestedDateObj.getDay()];
     
@@ -1329,7 +1379,23 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
     const openTime = businessHours.open;
     const closeTime = businessHours.close;
     
-    // Generar slots cada 30 minutos
+    // Obtener configuración de slots del tenant
+    const slotConfig = tenantConfig.slot_config || {
+      default_slot_duration: 30,
+      slot_granularity: 15,
+      buffer_between_appointments: 0
+    };
+    
+    // Usar duración personalizada del servicio o la por defecto del tenant
+    const serviceDuration = service.custom_slot_duration || service.duration_minutes || slotConfig.default_slot_duration;
+    const slotGranularity = slotConfig.slot_granularity || 15;
+    const bufferBetween = slotConfig.buffer_between_appointments || 0;
+    const bufferBefore = service.buffer_before_minutes || 0;
+    const bufferAfter = service.buffer_after_minutes || 0;
+    
+    // Calcular duración total incluyendo buffers
+    const totalDuration = bufferBefore + serviceDuration + bufferAfter;
+    
     const slots = [];
     const startHour = parseInt(openTime.split(':')[0]);
     const startMinute = parseInt(openTime.split(':')[1]);
@@ -1343,11 +1409,14 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
     endTime.setHours(endHour, endMinute, 0, 0);
     
     while (currentTime < endTime) {
-      const slotEnd = new Date(currentTime.getTime() + duration * 60000);
+      // Calcular inicio real del servicio (después del buffer)
+      const serviceStart = new Date(currentTime.getTime() + bufferBefore * 60000);
+      const serviceEnd = new Date(serviceStart.getTime() + serviceDuration * 60000);
+      const slotEnd = new Date(serviceEnd.getTime() + bufferAfter * 60000);
       
-      // Verificar que el slot termine antes del cierre
+      // Verificar que el slot completo (con buffers) termine antes del cierre
       if (slotEnd <= endTime) {
-        // Verificar disponibilidad en calendario
+        // Verificar disponibilidad en calendario (periodo completo con buffers)
         const isAvailable = await checkCalendarAvailability(
           tenantConfig.id,
           currentTime.toISOString(),
@@ -1356,24 +1425,36 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
         
         if (isAvailable) {
           slots.push({
-            startTime: currentTime.toISOString(),
-            endTime: slotEnd.toISOString(),
-            displayTime: currentTime.toLocaleTimeString('es-ES', { 
+            slotStart: currentTime.toISOString(), // Inicio del slot completo
+            slotEnd: slotEnd.toISOString(),       // Fin del slot completo
+            serviceStart: serviceStart.toISOString(), // Inicio real del servicio
+            serviceEnd: serviceEnd.toISOString(),     // Fin real del servicio
+            displayTime: serviceStart.toLocaleTimeString('es-ES', { 
               hour: '2-digit', 
               minute: '2-digit',
               timeZone: 'Europe/Madrid'
-            })
+            }),
+            bufferBefore,
+            bufferAfter,
+            serviceDuration
           });
         }
       }
       
-      // Avanzar 30 minutos
-      currentTime = new Date(currentTime.getTime() + 30 * 60000);
+      // Avanzar según la granularidad configurada
+      currentTime = new Date(currentTime.getTime() + slotGranularity * 60000);
     }
     
     return {
       success: true,
-      slots: slots.slice(0, 5) // Máximo 5 slots
+      slots: slots.slice(0, 5), // Máximo 5 slots
+      slotConfig: {
+        granularity: slotGranularity,
+        serviceDuration,
+        bufferBefore,
+        bufferAfter,
+        totalDuration
+      }
     };
   } catch (error) {
     console.error('Error generating available slots:', error);

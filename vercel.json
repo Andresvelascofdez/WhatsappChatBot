@@ -5,9 +5,24 @@
     {
       "src": "api/chatbot.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/admin/index.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/admin/add-client.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/oauth/google/callback.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    { "src": "/admin", "dest": "/api/admin/index.js" },
+    { "src": "/admin/add-client", "dest": "/api/admin/add-client.js" },
+    { "src": "/api/oauth/google/callback", "dest": "/api/oauth/google/callback.js" },
     { "src": "/(.*)", "dest": "/api/chatbot.js" }
   ]
 }

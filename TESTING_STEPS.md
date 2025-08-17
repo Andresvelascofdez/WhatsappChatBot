@@ -15,7 +15,7 @@ GOOGLE_CLIENT_ID=tu-client-id-real
 GOOGLE_CLIENT_SECRET=tu-client-secret-real
 
 # 🎨 PANEL DE ADMINISTRACIÓN:
-# https://tu-app.vercel.app/admin
+# https://whatsapp-chat-bot-xi.vercel.app/admin
 # (Para agregar clientes visualmente)
 ```
 
@@ -40,7 +40,7 @@ GOOGLE_CLIENT_SECRET=tu-client-secret-real
 
 ```bash
 # Test básico - debe devolver status 200
-curl https://tu-app.vercel.app/health
+curl https://whatsapp-chat-bot-xi.vercel.app/health
 
 # Esperado:
 {
@@ -55,7 +55,7 @@ curl https://tu-app.vercel.app/health
 
 ```bash
 # Test webhook verification
-curl "https://tu-app.vercel.app/webhook?hub.mode=subscribe&hub.verify_token=chatbot_verify_2024&hub.challenge=test123"
+curl "https://whatsapp-chat-bot-xi.vercel.app/webhook?hub.mode=subscribe&hub.verify_token=chatbot_verify_2024&hub.challenge=test123"
 
 # Esperado: "test123" (devuelve el challenge)
 ```
@@ -87,7 +87,7 @@ WHERE tenant_id = 'default';
 
 ```bash
 # Simular mensaje entrante (sustituye TU_NUMERO por el número configurado)
-curl -X POST https://tu-app.vercel.app/webhook \
+curl -X POST https://whatsapp-chat-bot-xi.vercel.app/webhook \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "From=whatsapp:+1234567890&To=whatsapp:+TU_NUMERO&Body=hola&MessageSid=test123&ProfileName=TestUser"
 
@@ -259,7 +259,7 @@ INSERT INTO services (tenant_id, name, price, duration_minutes) VALUES
 #### **2. Verificar Variables de Entorno**
 ```bash
 # API test endpoint:
-curl https://tu-app.vercel.app/api/status
+curl https://whatsapp-chat-bot-xi.vercel.app/api/status
 
 # Debe mostrar estado de configuraciones
 ```
@@ -303,7 +303,7 @@ SELECT COUNT(*) as total_appointments FROM appointments;
 
 ### **🔗 Configurar Webhook en Twilio:**
 ```
-Webhook URL: https://tu-app.vercel.app/webhook
+Webhook URL: https://whatsapp-chat-bot-xi.vercel.app/webhook
 Method: POST
 ```
 

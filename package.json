@@ -17,7 +17,10 @@
     "clean": "pnpm -r clean",
     "db:migrate": "pnpm --filter @chatbot/db migrate",
     "db:seed": "pnpm --filter @chatbot/db seed",
-    "precommit": "lint-staged"
+    "precommit": "lint-staged",
+    "client:add": "node scripts/add-new-client.js",
+    "client:authorize": "node scripts/authorize-client-calendar.js",
+    "client:verify": "node scripts/verify-google-config.js"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

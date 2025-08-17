@@ -80,7 +80,33 @@ vercel --prod
 
 ## 🏢 **Configuración Multi-Tenant**
 
-### **Variables de Entorno (Solo 4 necesarias)**
+### **🎨 Panel de Administración Visual (RECOMENDADO)**
+
+```bash
+# 1. Abrir panel de administración web
+https://tu-app.vercel.app/admin
+
+# 2. Hacer click en "➕ Agregar Cliente"
+# 3. Completar formulario visual
+# 4. ¡Listo! Cliente creado + enlace de autorización generado
+```
+
+### **🖥️ Scripts de Terminal (Alternativo)**
+
+```bash
+# 1. Verificar configuración Google OAuth2
+npm run client:verify
+
+# 2. Agregar nuevo cliente (proceso guiado)
+npm run client:add
+
+# 3. Enviar enlace de autorización al cliente
+# (El script lo genera automáticamente)
+```
+
+📋 **Guía completa**: Ver [AGREGAR_CLIENTES.md](./AGREGAR_CLIENTES.md)
+
+### **Variables de Entorno (Solo 6 necesarias)**
 
 ```bash
 # ✅ REQUERIDAS EN VERCEL
@@ -89,9 +115,12 @@ SUPABASE_ANON_KEY=tu_anon_key_aqui
 TWILIO_ACCOUNT_SID=tu_account_sid_de_twilio
 TWILIO_AUTH_TOKEN=tu_auth_token_de_twilio
 
+# ✅ PARA AUTORIZACIÓN AUTOMÁTICA DE CLIENTES
+GOOGLE_CLIENT_ID=tu_client_id_de_google_cloud
+GOOGLE_CLIENT_SECRET=tu_client_secret_de_google_cloud
+
 # ❌ YA NO NECESITAS:
 # TWILIO_PHONE_NUMBER (se configura por negocio en BD)
-# GOOGLE_* (se configura por negocio en BD)
 ```
 
 ### **Configuración por Negocio (Base de Datos)**

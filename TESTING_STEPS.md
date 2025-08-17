@@ -5,17 +5,18 @@
 ### **✅ Variables de Entorno en Vercel**
 ```bash
 # Ir a Vercel Dashboard > Tu Proyecto > Settings > Environment Variables
-# Verificar que SOLO tienes estas 4:
+# Verificar que tienes estas 6 variables:
 
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_ANON_KEY=tu-anon-key-real
 TWILIO_ACCOUNT_SID=tu-account-sid-real  
 TWILIO_AUTH_TOKEN=tu-auth-token-real
+GOOGLE_CLIENT_ID=tu-client-id-real
+GOOGLE_CLIENT_SECRET=tu-client-secret-real
 
-# ❌ ELIMINAR si las tienes:
-# TWILIO_PHONE_NUMBER
-# GOOGLE_CLIENT_ID
-# GOOGLE_CLIENT_SECRET
+# 🎨 PANEL DE ADMINISTRACIÓN:
+# https://tu-app.vercel.app/admin
+# (Para agregar clientes visualmente)
 ```
 
 ### **✅ Base de Datos Configurada**

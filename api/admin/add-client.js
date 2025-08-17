@@ -654,7 +654,7 @@ async function processForm(req, res) {
         const { data: tenantData, error: tenantError } = await supabase
             .from('tenants')
             .insert([{
-                id: tenantId,
+                // Dejamos que Supabase genere el UUID automáticamente
                 name: businessName,           // Schema real usa 'name'
                 phone: phoneNumber,          // Schema real usa 'phone'
                 email: email,
@@ -666,13 +666,16 @@ async function processForm(req, res) {
             }])
             .select();
 
-        if (tenantError) {
-            throw new Error(`Error creando cliente: ${tenantError.message}`);
+        if (tenantError || !tenantData || tenantData.length === 0) {
+            throw new Error(`Error creando cliente: ${tenantError?.message || 'No se creó el tenant'}`);
         }
+
+        const createdTenant = tenantData[0];
+        const actualTenantId = createdTenant.id; // UUID generado automáticamente
 
         // Crear servicios con configuración por servicio (usando nombres reales del schema)
         const servicesWithTenant = services.map(service => ({
-            tenant_id: tenantId,
+            tenant_id: actualTenantId,
             name: service.name,
             description: `Servicio de ${service.name}`,
             price_cents: Math.round(service.price * 100), // Schema usa 'price_cents' como entero
@@ -690,11 +693,11 @@ async function processForm(req, res) {
         }
 
         // Generar enlace de autorización
-        const authUrl = generateAuthUrl(tenantId, email);
+        const authUrl = generateAuthUrl(actualTenantId, email);
 
         // Mostrar página de éxito
         return showSuccessPage(res, {
-            tenantId,
+            tenantId: actualTenantId,
             businessName,
             phoneNumber,
             email,

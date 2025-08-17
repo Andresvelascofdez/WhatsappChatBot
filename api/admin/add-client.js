@@ -14,9 +14,8 @@ const supabase = createClient(
 );
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const REDIRECT_URI = process.env.VERCEL_URL ? 
-    `https://${process.env.VERCEL_URL}/api/oauth/google/callback` : 
-    'https://whatsapp-chat-bot-xi.vercel.app/api/oauth/google/callback';
+// Forzar uso de URL principal para evitar problemas con preview deployments
+const REDIRECT_URI = 'https://whatsapp-chat-bot-xi.vercel.app/api/oauth/google/callback';
 
 function generateAuthUrl(tenantId, email) {
     const params = new URLSearchParams({

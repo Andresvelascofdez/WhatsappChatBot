@@ -18,9 +18,8 @@ const supabase = createClient(
 // Configuración de Google OAuth2
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const REDIRECT_URI = process.env.VERCEL_URL ? 
-    `https://${process.env.VERCEL_URL}/api/oauth/google/callback` : 
-    'https://tu-app.vercel.app/api/oauth/google/callback';
+// Forzar uso de URL principal para evitar problemas con preview deployments
+const REDIRECT_URI = 'https://whatsapp-chat-bot-xi.vercel.app/api/oauth/google/callback';
 
 module.exports = async function handler(req, res) {
     console.log('🔄 Google OAuth Callback recibido');

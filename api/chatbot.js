@@ -1074,12 +1074,18 @@ async function getGoogleCalendarToken(tenantId) {
 // Función para verificar disponibilidad en Google Calendar
 async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
   try {
+    // Para el tenant por defecto, no verificar calendario (asumir disponible)
+    if (tenantId === 'default') {
+      console.log(`📅 Default tenant - skipping calendar check, assuming available`);
+      return true;
+    }
+    
     const calendarConfig = await getGoogleCalendarToken(tenantId);
     const { access_token, calendar_id } = calendarConfig;
     
     if (!access_token || !calendar_id) {
-      console.log(`⚠️ Calendar not configured for tenant ${tenantId}`);
-      throw new Error('Calendar access token or calendar ID not configured');
+      console.log(`⚠️ Calendar not configured for tenant ${tenantId} - assuming available`);
+      return true; // Si no hay configuración, asumir disponible
     }
     
     const url = `https://www.googleapis.com/calendar/v3/freeBusy`;
@@ -1107,8 +1113,8 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
     });
     
     if (!response.ok) {
-      console.log(`❌ Calendar API error for tenant ${tenantId}: ${response.status}`);
-      throw new Error(`Calendar API error: ${response.status}`);
+      console.log(`❌ Calendar API error for tenant ${tenantId}: ${response.status} - assuming available`);
+      return true; // En caso de error de API, asumir disponible
     }
     
     const result = await response.json();
@@ -1120,7 +1126,7 @@ async function checkCalendarAvailability(tenantId, startDateTime, endDateTime) {
     return isAvailable;
   } catch (error) {
     console.error('Error checking calendar availability:', error);
-    return false; // En caso de error, no permitir la reserva
+    return true; // En caso de error, asumir disponible para no bloquear reservas
   }
 }
 

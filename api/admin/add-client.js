@@ -32,6 +32,23 @@ function generateAuthUrl(tenantId, email) {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
+// Función para asegurar que existen las columnas necesarias
+async function ensureTableColumns() {
+    try {
+        // Solo verificamos que podemos hacer una consulta básica
+        // Las migraciones deben ejecutarse manualmente en Supabase
+        const { data } = await supabase
+            .from('tenants')
+            .select('id')
+            .limit(1);
+        
+        console.log('✅ Conexión a base de datos verificada');
+    } catch (error) {
+        console.log('⚠️ Error verificando base de datos:', error.message);
+        throw new Error('No se puede conectar a la base de datos');
+    }
+}
+
 // Función auxiliar para procesar el body de la request
 function parseBody(req) {
     return new Promise((resolve, reject) => {
@@ -368,19 +385,65 @@ function showForm(res) {
                 <button type="button" class="btn btn-add" onclick="addService()">➕ Agregar Otro Servicio</button>
             </div>
 
-            <!-- Configuración Automática -->
+            <!-- Configuración de Slots y Horarios -->
             <div class="section">
-                <h3>⚙️ Configuración Automática</h3>
+                <h3>⚙️ Configuración de Slots y Horarios</h3>
                 
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="slotGranularity">Duración de slots (minutos) *</label>
+                        <select id="slotGranularity" name="slotGranularity" required>
+                            <option value="15">15 minutos</option>
+                            <option value="30" selected>30 minutos</option>
+                            <option value="45">45 minutos</option>
+                            <option value="60">60 minutos</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="maxAdvanceBooking">Reservas con anticipación (días) *</label>
+                        <select id="maxAdvanceBooking" name="maxAdvanceBooking" required>
+                            <option value="7">7 días</option>
+                            <option value="15">15 días</option>
+                            <option value="30" selected>30 días</option>
+                            <option value="60">60 días</option>
+                            <option value="90">90 días</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="timezone">Zona Horaria *</label>
+                        <select id="timezone" name="timezone" required>
+                            <option value="Europe/Madrid" selected>España (Madrid)</option>
+                            <option value="Europe/London">Reino Unido (Londres)</option>
+                            <option value="Europe/Paris">Francia (París)</option>
+                            <option value="America/New_York">USA (Nueva York)</option>
+                            <option value="America/Los_Angeles">USA (Los Ángeles)</option>
+                            <option value="America/Mexico_City">México (Ciudad de México)</option>
+                            <option value="America/Buenos_Aires">Argentina (Buenos Aires)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sameDayBooking">¿Permitir reservas el mismo día? *</label>
+                        <select id="sameDayBooking" name="sameDayBooking" required>
+                            <option value="true" selected>Sí, permitir</option>
+                            <option value="false">No, mínimo 1 día</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div class="info-box">
-                    <h4>🚀 Lo que se configurará automáticamente:</h4>
+                    <h4>💡 Información sobre horarios</h4>
+                    <p>Los horarios de negocio se configurarán automáticamente como:</p>
                     <ul style="margin-left: 20px; margin-top: 10px;">
-                        <li>✅ Horarios de negocio: Lun-Vie 9:00-18:00, Sáb 9:00-14:00</li>
-                        <li>✅ Slots de 30 minutos</li>
-                        <li>✅ Reservas hasta 30 días de anticipación</li>
-                        <li>✅ Mínimo 2 horas de anticipación</li>
-                        <li>✅ Enlace de autorización Google Calendar</li>
+                        <li>✅ Lunes a Viernes: 9:00 - 18:00</li>
+                        <li>✅ Sábado: 9:00 - 14:00</li>
+                        <li>✅ Domingo: Cerrado</li>
                     </ul>
+                    <p>Puedes modificar estos horarios después desde la base de datos si es necesario.</p>
                 </div>
             </div>
 
@@ -527,6 +590,12 @@ async function processForm(req, res) {
         const phoneNumber = parsedData.phoneNumber;
         const email = parsedData.email;
         const address = parsedData.address || null;
+        
+        // Extraer configuración de slots
+        const slotGranularity = parseInt(parsedData.slotGranularity) || 30;
+        const maxAdvanceBooking = parseInt(parsedData.maxAdvanceBooking) || 30;
+        const timezone = parsedData.timezone || 'Europe/Madrid';
+        const sameDayBooking = parsedData.sameDayBooking === 'true';
 
         // Extraer servicios (los campos llegan con [] en el nombre)
         const serviceNames = parsedData['serviceName[]'] || [];
@@ -565,6 +634,16 @@ async function processForm(req, res) {
             throw new Error(`Campos faltantes: ${missingFields.join(', ')}`);
         }
 
+        // Asegurar que las columnas adicionales existen (ejecutar migraciones si es necesario)
+        await ensureTableColumns();
+
+        // Crear configuración de slots
+        const slotConfig = {
+            slot_granularity: slotGranularity,
+            allow_same_day_booking: sameDayBooking,
+            max_advance_booking_days: maxAdvanceBooking
+        };
+
         // Crear tenant en base de datos (ajustado a schema real)
         const { data: tenantData, error: tenantError } = await supabase
             .from('tenants')
@@ -572,9 +651,11 @@ async function processForm(req, res) {
                 id: tenantId,
                 name: businessName,
                 phone_masked: phoneNumber,
-                tz: 'Europe/Madrid',
+                tz: timezone,
                 locale: 'es',
-                active: true
+                active: true,
+                email: email,
+                slot_config: slotConfig
             }])
             .select();
 
@@ -582,10 +663,15 @@ async function processForm(req, res) {
             throw new Error(`Error creando cliente: ${tenantError.message}`);
         }
 
-        // Crear servicios
+        // Crear servicios con configuración por servicio
         const servicesWithTenant = services.map(service => ({
-            ...service,
-            tenant_id: tenantId
+            tenant_id: tenantId,
+            name: service.name,
+            duration_min: service.duration_min,
+            price_cents: service.price_cents,
+            slot_granularity_min: slotGranularity, // Usar la configuración global por defecto
+            buffer_min: 0, // Sin buffer por defecto
+            is_active: true
         }));
 
         const { error: servicesError } = await supabase

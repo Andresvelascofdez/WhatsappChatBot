@@ -32,6 +32,20 @@ function generateAuthUrl(tenantId, email) {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
+// Función auxiliar para procesar el body de la request
+function parseBody(req) {
+    return new Promise((resolve, reject) => {
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk.toString();
+        });
+        req.on('end', () => {
+            resolve(body);
+        });
+        req.on('error', reject);
+    });
+}
+
 // Handler principal - se exporta al final del archivo
 
 function showForm(res) {
@@ -453,8 +467,20 @@ function showForm(res) {
 
 async function processForm(req, res) {
     try {
+        // Procesar el body de la request
+        let body;
+        if (!req.body) {
+            body = await parseBody(req);
+        } else {
+            body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        }
+        
+        // Debug: Log del body recibido
+        console.log('Raw body:', body);
+        console.log('Body type:', typeof body);
+        
         // Parsear datos del formulario
-        const formData = new URLSearchParams(req.body);
+        const formData = new URLSearchParams(body);
         
         const tenantId = formData.get('tenantId');
         const businessName = formData.get('businessName');
@@ -462,10 +488,25 @@ async function processForm(req, res) {
         const email = formData.get('email');
         const address = formData.get('address') || null;
 
+        // Debug: Log de campos extraídos
+        console.log('Parsed fields:', {
+            tenantId,
+            businessName,
+            phoneNumber,
+            email,
+            address
+        });
+
         // Parsear servicios
         const serviceNames = formData.getAll('serviceName[]');
         const servicePrices = formData.getAll('servicePrice[]');
         const serviceDurations = formData.getAll('serviceDuration[]');
+
+        console.log('Services:', {
+            serviceNames,
+            servicePrices,
+            serviceDurations
+        });
 
         const services = serviceNames.map((name, index) => ({
             name: name,
@@ -473,9 +514,16 @@ async function processForm(req, res) {
             duration_minutes: parseInt(serviceDurations[index])
         }));
 
-        // Validaciones básicas
-        if (!tenantId || !businessName || !phoneNumber || !email || services.length === 0) {
-            throw new Error('Todos los campos obligatorios deben estar completos');
+        // Validaciones básicas con mensajes específicos
+        const missingFields = [];
+        if (!tenantId) missingFields.push('ID del Tenant');
+        if (!businessName) missingFields.push('Nombre del Negocio');
+        if (!phoneNumber) missingFields.push('Número de Teléfono');
+        if (!email) missingFields.push('Email');
+        if (services.length === 0) missingFields.push('Al menos un servicio');
+        
+        if (missingFields.length > 0) {
+            throw new Error(`Campos faltantes: ${missingFields.join(', ')}`);
         }
 
         // Crear tenant en base de datos

@@ -623,11 +623,8 @@ async function processForm(req, res) {
 
         const services = serviceNamesArray.map((name, index) => ({
             name: name,
-            price_cents: Math.round(parseFloat(servicePricesArray[index] || 0) * 100),
-            duration_min: parseInt(serviceDurationsArray[index] || 30),
-            slot_granularity_min: slotGranularity, // Granularidad mínima para cálculos
-            buffer_min: 0, // Sin buffer por defecto
-            is_active: true
+            price: parseFloat(servicePricesArray[index] || 0), // Precio en euros como decimal
+            duration_minutes: parseInt(serviceDurationsArray[index] || 30) // Schema usa 'duration_minutes'
         }));
 
         // Validaciones básicas con mensajes específicos
@@ -670,15 +667,14 @@ async function processForm(req, res) {
             throw new Error(`Error creando cliente: ${tenantError.message}`);
         }
 
-        // Crear servicios con configuración por servicio
+        // Crear servicios con configuración por servicio (usando nombres reales del schema)
         const servicesWithTenant = services.map(service => ({
             tenant_id: tenantId,
             name: service.name,
-            duration_min: service.duration_min,
-            price_cents: service.price_cents,
-            slot_granularity_min: slotGranularity, // Usar la configuración global por defecto
-            buffer_min: 0, // Sin buffer por defecto
-            is_active: true
+            description: `Servicio de ${service.name}`, // Campo que existe en schema
+            price: service.price, // Schema usa 'price' en euros como decimal
+            duration_minutes: service.duration_minutes, // Schema usa 'duration_minutes'
+            custom_slot_duration: null // Campo que existe en schema original
         }));
 
         const { error: servicesError } = await supabase

@@ -595,11 +595,11 @@ function showForm(res) {
                 <div class="faqs-container" id="faqsContainer">
                     <div class="faq-item">
                         <div class="form-group">
-                            <label>Pregunta *</label>
+                            <label>Pregunta</label>
                             <input type="text" name="faqQuestion[]" placeholder="¿Cuáles son vuestros precios?" style="font-size: 1.1rem; padding: 12px;">
                         </div>
                         <div class="form-group">
-                            <label>Respuesta *</label>
+                            <label>Respuesta</label>
                             <textarea name="faqAnswer[]" rows="3" placeholder="Nuestros precios son: Corte €15, Corte + Barba €25..." style="font-size: 1.1rem; padding: 12px; resize: vertical;"></textarea>
                         </div>
                         <div class="grid-2">
@@ -666,11 +666,11 @@ function showForm(res) {
             faqItem.className = 'faq-item';
             faqItem.innerHTML = \`
                 <div class="form-group">
-                    <label>Pregunta *</label>
+                    <label>Pregunta</label>
                     <input type="text" name="faqQuestion[]" placeholder="¿Cuáles son vuestros horarios?" style="font-size: 1.1rem; padding: 12px;">
                 </div>
                 <div class="form-group">
-                    <label>Respuesta *</label>
+                    <label>Respuesta</label>
                     <textarea name="faqAnswer[]" rows="3" placeholder="Abrimos de Lunes a Viernes de 9:00 a 18:00..." style="font-size: 1.1rem; padding: 12px; resize: vertical;"></textarea>
                 </div>
                 <div class="grid-2">

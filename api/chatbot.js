@@ -141,9 +141,6 @@ module.exports = async (req, res) => {
           timestamp: new Date().toISOString()
         });
         
-      case urlPath === '/admin/clients' && method === 'GET':
-        return await handleAdminGetClients(req, res);
-        
       case urlPath === '/admin/clients' && method === 'POST':
         return await handleAdminCreateClient(req, res);
         

@@ -123,12 +123,26 @@ module.exports = async (req, res) => {
             hint: 'Configure WEBHOOK_VERIFY_TOKEN environment variable'
           });
         }
+
+      case urlPath === '/admin/clients' && method === 'GET':
+        return await handleAdminGetClients(req, res);
+        
+      case urlPath === '/admin/clients' && method === 'POST':
+        return await handleAdminCreateClient(req, res);
+        
+      case urlPath.startsWith('/admin/clients/') && method === 'PUT':
+        const clientId = urlPath.split('/')[3];
+        return await handleAdminUpdateClient(req, res, clientId);
+        
+      case urlPath.startsWith('/admin/clients/') && method === 'GET':
+        const getClientId = urlPath.split('/')[3];
+        return await handleAdminGetClient(req, res, getClientId);
         
       default:
         return res.status(404).json({
           error: 'Not Found',
           message: `Endpoint ${method} ${urlPath} not found`,
-          availableEndpoints: ['GET /', 'GET /health', 'GET /api/status', 'POST /webhook', 'GET /webhook'],
+          availableEndpoints: ['GET /', 'GET /health', 'GET /api/status', 'POST /webhook', 'GET /webhook', 'GET /admin/clients', 'POST /admin/clients', 'PUT /admin/clients/:id', 'GET /admin/clients/:id'],
           timestamp: new Date().toISOString()
         });
     }
@@ -605,7 +619,8 @@ Ejemplo: reservar corte ${day}/${month}/${year} 10:00
       
       services.forEach(service => {
         const duration = service.duration_minutes ? ` (${service.duration_minutes} min)` : '';
-        servicesText += `✂️ *${service.name}* - €${service.price}${duration}\n`;
+        const price = service.price ? `€${service.price}` : 'Consultar precio';
+        servicesText += `✂️ *${service.name}* - ${price}${duration}\n`;
         if (service.description) {
           servicesText += `   ${service.description}\n`;
         }
@@ -625,8 +640,6 @@ Ejemplo: reservar corte ${day}/${month}/${year} 10:00
 ${hoursText}
 
 ⏰ *Turnos cada 30 minutos*
-⏱️ *Duración promedio*:
-${services.map(s => `   • ${s.name}: ${s.duration_minutes || 30} min`).join('\n')}
 
 Para verificar disponibilidad en una fecha específica, escribe *reservar*.`;
     }
@@ -755,6 +768,10 @@ Intenta con una fecha futura: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`
     
     // Crear fecha/hora de fin
     const endDateTime = new Date(requestedDateTime.getTime() + (service.duration_minutes || 30) * 60000);
+    
+    // Convertir a ISO con zona horaria local (España)
+    const startTimeISO = new Date(requestedDateTime.getTime() - (requestedDateTime.getTimezoneOffset() * 60000)).toISOString();
+    const endTimeISO = new Date(endDateTime.getTime() - (endDateTime.getTimezoneOffset() * 60000)).toISOString();
     
     // Generar slots disponibles para ese día
     const slotsResult = await generateAvailableSlots(tenantConfig, service.id, `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
@@ -1806,5 +1823,200 @@ async function sendWhatsAppMessage(to, message, tenantConfig = null) {
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
     return { success: false, error: error.message };
+  }
+}
+
+// ==================== ADMIN PORTAL HANDLERS ====================
+
+// GET /admin/clients - Listar todos los tenants
+async function handleAdminGetClients(req, res) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({ error: 'Supabase credentials not configured' });
+    }
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?select=*,services(*),faqs(*)&order=created_at.desc`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Supabase error: ${response.status}`);
+    }
+
+    const tenants = await response.json();
+    return res.status(200).json({ success: true, data: tenants });
+  } catch (error) {
+    console.error('Error fetching clients:', error);
+    return res.status(500).json({ error: 'Failed to fetch clients', message: error.message });
+  }
+}
+
+// POST /admin/clients - Crear nuevo tenant
+async function handleAdminCreateClient(req, res) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({ error: 'Supabase credentials not configured' });
+    }
+
+    // Parse request body
+    let body = '';
+    if (req.body) {
+      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    } else {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      body = Buffer.concat(chunks).toString();
+    }
+
+    const clientData = JSON.parse(body);
+    
+    // Validaciones básicas
+    if (!clientData.name || !clientData.phone) {
+      return res.status(400).json({ error: 'Name and phone are required' });
+    }
+
+    // Crear tenant en base de datos
+    const tenantResponse = await fetch(`${supabaseUrl}/rest/v1/tenants`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        name: clientData.name,
+        business_name: clientData.business_name || clientData.name,
+        phone: clientData.phone,
+        email: clientData.email,
+        address: clientData.address,
+        business_hours: clientData.business_hours || {
+          monday: { open: '09:00', close: '18:00' },
+          tuesday: { open: '09:00', close: '18:00' },
+          wednesday: { open: '09:00', close: '18:00' },
+          thursday: { open: '09:00', close: '18:00' },
+          friday: { open: '09:00', close: '18:00' },
+          saturday: { open: '09:00', close: '14:00' },
+          sunday: { closed: true }
+        },
+        slot_config: clientData.slot_config || {
+          slot_granularity: 15,
+          allow_same_day_booking: true,
+          max_advance_booking_days: 30
+        },
+        created_at: new Date().toISOString()
+      })
+    });
+
+    if (!tenantResponse.ok) {
+      const errorText = await tenantResponse.text();
+      throw new Error(`Failed to create tenant: ${errorText}`);
+    }
+
+    const tenant = await tenantResponse.json();
+    return res.status(201).json({ success: true, data: tenant[0] });
+  } catch (error) {
+    console.error('Error creating client:', error);
+    return res.status(500).json({ error: 'Failed to create client', message: error.message });
+  }
+}
+
+// PUT /admin/clients/:id - Actualizar tenant existente
+async function handleAdminUpdateClient(req, res, clientId) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({ error: 'Supabase credentials not configured' });
+    }
+
+    // Parse request body
+    let body = '';
+    if (req.body) {
+      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    } else {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      body = Buffer.concat(chunks).toString();
+    }
+
+    const updateData = JSON.parse(body);
+    
+    // Actualizar tenant en base de datos
+    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        ...updateData,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update tenant: ${errorText}`);
+    }
+
+    const tenant = await response.json();
+    return res.status(200).json({ success: true, data: tenant[0] });
+  } catch (error) {
+    console.error('Error updating client:', error);
+    return res.status(500).json({ error: 'Failed to update client', message: error.message });
+  }
+}
+
+// GET /admin/clients/:id - Obtener tenant específico
+async function handleAdminGetClient(req, res, clientId) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({ error: 'Supabase credentials not configured' });
+    }
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}&select=*,services(*),faqs(*)`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Supabase error: ${response.status}`);
+    }
+
+    const tenants = await response.json();
+    if (tenants.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    return res.status(200).json({ success: true, data: tenants[0] });
+  } catch (error) {
+    console.error('Error fetching client:', error);
+    return res.status(500).json({ error: 'Failed to fetch client', message: error.message });
   }
 }

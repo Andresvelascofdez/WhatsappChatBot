@@ -146,6 +146,10 @@ module.exports = async (req, res) => {
         const faqClientId = urlPath.split('/')[3];
         return await handleAdminCreateFAQ(req, res, faqClientId);
         
+      case urlPath.startsWith('/admin/clients/') && urlPath.endsWith('/services') && method === 'POST':
+        const serviceClientId = urlPath.split('/')[3];
+        return await handleAdminCreateService(req, res, serviceClientId);
+        
       default:
         return res.status(404).json({
           error: 'Not Found',
@@ -161,7 +165,8 @@ module.exports = async (req, res) => {
             'PUT /admin/clients/:id', 
             'GET /admin/clients/:id',
             'PUT /admin/clients/:id/business-hours',
-            'POST /admin/clients/:id/faqs'
+            'POST /admin/clients/:id/faqs',
+            'POST /admin/clients/:id/services'
           ],
           timestamp: new Date().toISOString()
         });
@@ -345,7 +350,7 @@ async function getTenantByPhoneNumber(phoneNumber) {
     }
     
     // Buscar tenant por número de teléfono normalizado
-    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?phone=eq.${normalizedPhone}&select=*`, {
+    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?phone=eq.${normalizedPhone}&select=*,services(*),faqs(*)`, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
@@ -369,41 +374,29 @@ async function getTenantByPhoneNumber(phoneNumber) {
     const tenant = tenants[0];
     console.log(`Found tenant: ${tenant.name} (ID: ${tenant.id})`);
 
-    // Cargar servicios del tenant con configuraciones de slots
-    const servicesResponse = await fetch(`${supabaseUrl}/rest/v1/services?tenant_id=eq.${tenant.id}&select=*`, {
-      method: 'GET',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    let services = [];
-    if (servicesResponse.ok) {
-      services = await servicesResponse.json();
-    }
-    
-    // Cargar FAQs del tenant
-    const faqsResponse = await fetch(`${supabaseUrl}/rest/v1/faqs?tenant_id=eq.${tenant.id}&is_active=eq.true&order=priority.desc,created_at.desc`, {
-      method: 'GET',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    let faqs = [];
-    if (faqsResponse.ok) {
-      faqs = await faqsResponse.json();
-    }
-    
-    return {
+    // Normalizar estructura de datos para compatibilidad
+    const normalizedTenant = {
       ...tenant,
-      services: services,
-      faqs: faqs
+      business_name: tenant.name, // Mapear name a business_name
+      business_hours: tenant.business_hours || {
+        monday: { open: '09:00', close: '18:00' },
+        tuesday: { open: '09:00', close: '18:00' },
+        wednesday: { open: '09:00', close: '18:00' },
+        thursday: { open: '09:00', close: '18:00' },
+        friday: { open: '09:00', close: '18:00' },
+        saturday: { open: '09:00', close: '14:00' },
+        sunday: { closed: true }
+      },
+      // Normalizar servicios con precios en euros
+      services: (tenant.services || []).map(service => ({
+        ...service,
+        price: service.price_cents ? (service.price_cents / 100) : (service.price || 0),
+        duration_minutes: service.duration_min || service.duration_minutes || 30
+      })),
+      faqs: tenant.faqs || []
     };
+    
+    return normalizedTenant;
     
   } catch (error) {
     console.error('Error getting tenant by phone number:', error);
@@ -528,7 +521,7 @@ function findRelevantFAQ(messageText, faqs) {
 // Función para generar respuesta basada en el mensaje
 async function generateResponse(messageText, phoneNumber, contactName, tenantConfig) {
   try {
-    const businessName = tenantConfig.business_name || 'nuestra empresa';
+    const businessName = tenantConfig.business_name || tenantConfig.name || 'nuestra empresa';
     const services = tenantConfig.services || [];
     const faqs = tenantConfig.faqs || [];
     
@@ -692,10 +685,14 @@ Te ayudaré a resolver cualquier duda sobre nuestros servicios.`;
     
     // Contacto
     if (messageText.includes('contacto') || messageText.includes('teléfono') || messageText.includes('telefono')) {
+      const address = tenantConfig.address || 'Dirección no disponible';
+      const displayAddress = typeof address === 'string' ? address : 
+                           (address.full_address || `${address.street || ''} ${address.city || ''}`.trim());
+      
       return `📞 *Información de Contacto*
 
 🏪 *${businessName}*
-📍 Dirección: ${tenantConfig.address || 'Dirección no disponible'}
+📍 Dirección: ${displayAddress}
 📞 Teléfono: +${tenantConfig.phone}
 ${tenantConfig.email ? `📧 Email: ${tenantConfig.email}\n` : ''}
 🕒 *Horarios de Atención*
@@ -706,10 +703,14 @@ ${getBusinessHoursText(tenantConfig.business_hours)}
     
     // Ubicación
     if (messageText.includes('ubicacion') || messageText.includes('ubicación') || messageText.includes('dirección') || messageText.includes('direccion') || messageText.includes('llegar')) {
+      const address = tenantConfig.address || 'Dirección no disponible';
+      const displayAddress = typeof address === 'string' ? address : 
+                           (address.full_address || `${address.street || ''} ${address.city || ''}`.trim());
+      
       return `📍 *Cómo Llegar*
 
 🏪 *${businessName}*
-📍 ${tenantConfig.address || 'Dirección no disponible'}
+📍 ${displayAddress}
 
 🚗 *En coche*: Parking disponible
 🚌 *Transporte público*: Consulta líneas locales
@@ -1945,10 +1946,9 @@ async function handleAdminCreateClient(req, res) {
       },
       body: JSON.stringify({
         name: clientData.name,
-        business_name: clientData.business_name || clientData.name,
-        phone: clientData.phone,
         email: clientData.email,
-        address: addressData,
+        phone: clientData.phone,
+        address: addressData ? (addressData.full_address || JSON.stringify(addressData)) : null,
         business_hours: clientData.business_hours || {
           monday: { open: '09:00', close: '18:00' },
           tuesday: { open: '09:00', close: '18:00' },
@@ -1963,6 +1963,10 @@ async function handleAdminCreateClient(req, res) {
           allow_same_day_booking: true,
           max_advance_booking_days: 30
         },
+        settings: clientData.settings || {},
+        active: true,
+        tz: 'Europe/Madrid',
+        locale: 'es',
         created_at: new Date().toISOString()
       })
     });
@@ -2230,5 +2234,94 @@ async function handleAdminCreateFAQ(req, res, clientId) {
   } catch (error) {
     console.error('Error creating FAQ:', error);
     return res.status(500).json({ error: 'Failed to create FAQ', message: error.message });
+  }
+}
+
+// POST /admin/clients/:id/services - Crear nuevo servicio para tenant
+async function handleAdminCreateService(req, res, clientId) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({ error: 'Supabase credentials not configured' });
+    }
+
+    // Parse request body
+    let body = '';
+    if (req.body) {
+      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    } else {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      body = Buffer.concat(chunks).toString();
+    }
+
+    const serviceData = JSON.parse(body);
+    
+    // Validaciones básicas
+    if (!serviceData.name) {
+      return res.status(400).json({ error: 'Service name is required' });
+    }
+
+    // Verificar que el tenant existe
+    const tenantCheck = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!tenantCheck.ok) {
+      throw new Error('Error checking tenant');
+    }
+
+    const tenants = await tenantCheck.json();
+    if (tenants.length === 0) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    // Crear servicio en base de datos
+    const serviceResponse = await fetch(`${supabaseUrl}/rest/v1/services`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        tenant_id: clientId,
+        name: serviceData.name,
+        description: serviceData.description || `Servicio de ${serviceData.name}`,
+        price_cents: serviceData.price ? Math.round(serviceData.price * 100) : 0,
+        duration_min: serviceData.duration_minutes || serviceData.duration || 30,
+        buffer_min: serviceData.buffer_min || 0,
+        custom_slot_duration: serviceData.custom_slot_duration || null,
+        slot_granularity_min: serviceData.slot_granularity_min || 15,
+        is_active: serviceData.is_active !== false, // Por defecto true
+        settings: serviceData.settings || {},
+        created_at: new Date().toISOString()
+      })
+    });
+
+    if (!serviceResponse.ok) {
+      const errorText = await serviceResponse.text();
+      throw new Error(`Failed to create service: ${errorText}`);
+    }
+
+    const service = await serviceResponse.json();
+    return res.status(201).json({ 
+      success: true, 
+      message: 'Service created successfully',
+      data: service[0] 
+    });
+  } catch (error) {
+    console.error('Error creating service:', error);
+    return res.status(500).json({ error: 'Failed to create service', message: error.message });
   }
 }

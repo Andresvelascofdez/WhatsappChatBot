@@ -124,6 +124,23 @@ module.exports = async (req, res) => {
           });
         }
 
+      case urlPath === '/admin' && method === 'GET':
+      case urlPath === '/admin/' && method === 'GET':
+        return res.status(200).json({
+          message: 'Admin Panel API',
+          version: '1.0.0',
+          endpoints: [
+            'GET /admin/clients',
+            'POST /admin/clients', 
+            'PUT /admin/clients/:id',
+            'GET /admin/clients/:id',
+            'PUT /admin/clients/:id/business-hours',
+            'POST /admin/clients/:id/faqs',
+            'POST /admin/clients/:id/services'
+          ],
+          timestamp: new Date().toISOString()
+        });
+        
       case urlPath === '/admin/clients' && method === 'GET':
         return await handleAdminGetClients(req, res);
         
@@ -160,6 +177,8 @@ module.exports = async (req, res) => {
             'GET /api/status', 
             'POST /webhook', 
             'GET /webhook', 
+            'GET /admin',
+            'GET /admin/',
             'GET /admin/clients', 
             'POST /admin/clients', 
             'PUT /admin/clients/:id', 

@@ -276,6 +276,36 @@ function showForm(res) {
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
 
+        .faqs-container {
+            border: 2px dashed #e0e0e0;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 15px;
+            background: #f8f9fa;
+        }
+
+        .faq-item {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1px solid #e0e0e0;
+            position: relative;
+        }
+
+        .faq-item textarea {
+            width: 100%;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: inherit;
+        }
+
+        .faq-item textarea:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+
         .btn {
             padding: 12px 25px;
             border: none;
@@ -548,6 +578,47 @@ function showForm(res) {
                 </div>
             </div>
 
+            <!-- FAQs -->
+            <div class="section">
+                <h3>❓ Preguntas Frecuentes (FAQs)</h3>
+                
+                <div class="info-box">
+                    <h4>💬 Configuración de FAQs del Chatbot</h4>
+                    <p>Define preguntas frecuentes que el chatbot podrá responder automáticamente:</p>
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li>✅ <strong>Palabras clave:</strong> Términos que activarán esta respuesta</li>
+                        <li>✅ <strong>Categoría:</strong> Para organizar las FAQs</li>
+                        <li>✅ <strong>Ejemplo:</strong> Pregunta sobre precios → Respuesta automática con lista de servicios</li>
+                    </ul>
+                </div>
+
+                <div class="faqs-container" id="faqsContainer">
+                    <div class="faq-item">
+                        <div class="form-group">
+                            <label>Pregunta *</label>
+                            <input type="text" name="faqQuestion[]" placeholder="¿Cuáles son vuestros precios?" style="font-size: 1.1rem; padding: 12px;">
+                        </div>
+                        <div class="form-group">
+                            <label>Respuesta *</label>
+                            <textarea name="faqAnswer[]" rows="3" placeholder="Nuestros precios son: Corte €15, Corte + Barba €25..." style="font-size: 1.1rem; padding: 12px; resize: vertical;"></textarea>
+                        </div>
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>Palabras clave (separadas por comas)</label>
+                                <input type="text" name="faqKeywords[]" placeholder="precio, precios, coste, cuánto" style="font-size: 1.1rem; padding: 12px;">
+                            </div>
+                            <div class="form-group">
+                                <label>Categoría</label>
+                                <input type="text" name="faqCategory[]" placeholder="precios" style="font-size: 1.1rem; padding: 12px;">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-danger" onclick="removeFaq(this)">🗑️</button>
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-add" onclick="addFaq()">➕ Agregar Otra FAQ</button>
+            </div>
+
             <!-- Botón de Envío -->
             <div class="submit-section">
                 <button type="submit" class="btn btn-primary" style="font-size: 1.2rem; padding: 15px 40px;">
@@ -586,6 +657,44 @@ function showForm(res) {
                 button.parentElement.remove();
             } else {
                 alert('Debe haber al menos un servicio');
+            }
+        }
+
+        function addFaq() {
+            const container = document.getElementById('faqsContainer');
+            const faqItem = document.createElement('div');
+            faqItem.className = 'faq-item';
+            faqItem.innerHTML = \`
+                <div class="form-group">
+                    <label>Pregunta *</label>
+                    <input type="text" name="faqQuestion[]" placeholder="¿Cuáles son vuestros horarios?" style="font-size: 1.1rem; padding: 12px;">
+                </div>
+                <div class="form-group">
+                    <label>Respuesta *</label>
+                    <textarea name="faqAnswer[]" rows="3" placeholder="Abrimos de Lunes a Viernes de 9:00 a 18:00..." style="font-size: 1.1rem; padding: 12px; resize: vertical;"></textarea>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Palabras clave (separadas por comas)</label>
+                        <input type="text" name="faqKeywords[]" placeholder="horario, horarios, abierto, horas" style="font-size: 1.1rem; padding: 12px;">
+                    </div>
+                    <div class="form-group">
+                        <label>Categoría</label>
+                        <input type="text" name="faqCategory[]" placeholder="horarios" style="font-size: 1.1rem; padding: 12px;">
+                    </div>
+                </div>
+                <button type="button" class="btn btn-danger" onclick="removeFaq(this)">🗑️</button>
+            \`;
+            container.appendChild(faqItem);
+        }
+
+        function removeFaq(button) {
+            const container = document.getElementById('faqsContainer');
+            if (container.children.length > 1) {
+                button.parentElement.remove();
+            } else {
+                // Permitir eliminar todos los FAQs ya que son opcionales
+                button.parentElement.remove();
             }
         }
 
@@ -703,22 +812,46 @@ async function processForm(req, res) {
         const servicePrices = parsedData['servicePrice[]'] || [];
         const serviceDurations = parsedData['serviceDuration[]'] || [];
 
+        // Extraer FAQs (opcionales)
+        const faqQuestions = parsedData['faqQuestion[]'] || [];
+        const faqAnswers = parsedData['faqAnswer[]'] || [];
+        const faqKeywords = parsedData['faqKeywords[]'] || [];
+        const faqCategories = parsedData['faqCategory[]'] || [];
+
         console.log('=== EXTRACTED DATA ===');
         console.log('Fields:', { tenantId, businessName, phoneNumber, email, address });
         console.log('Services:', { serviceNames, servicePrices, serviceDurations });
+        console.log('FAQs:', { faqQuestions, faqAnswers, faqKeywords, faqCategories });
 
         // Asegurarse de que los servicios sean arrays
         const serviceNamesArray = Array.isArray(serviceNames) ? serviceNames : (serviceNames ? [serviceNames] : []);
         const servicePricesArray = Array.isArray(servicePrices) ? servicePrices : (servicePrices ? [servicePrices] : []);
         const serviceDurationsArray = Array.isArray(serviceDurations) ? serviceDurations : (serviceDurations ? [serviceDurations] : []);
 
+        // Asegurarse de que los FAQs sean arrays
+        const faqQuestionsArray = Array.isArray(faqQuestions) ? faqQuestions : (faqQuestions ? [faqQuestions] : []);
+        const faqAnswersArray = Array.isArray(faqAnswers) ? faqAnswers : (faqAnswers ? [faqAnswers] : []);
+        const faqKeywordsArray = Array.isArray(faqKeywords) ? faqKeywords : (faqKeywords ? [faqKeywords] : []);
+        const faqCategoriesArray = Array.isArray(faqCategories) ? faqCategories : (faqCategories ? [faqCategories] : []);
+
         console.log('Arrays normalized:', { serviceNamesArray, servicePricesArray, serviceDurationsArray });
+        console.log('FAQs normalized:', { faqQuestionsArray, faqAnswersArray, faqKeywordsArray, faqCategoriesArray });
 
         const services = serviceNamesArray.map((name, index) => ({
             name: name,
             price: parseFloat(servicePricesArray[index] || 0), // Precio en euros como decimal
             duration_minutes: parseInt(serviceDurationsArray[index] || 30) // Schema usa 'duration_minutes'
         }));
+
+        // Crear FAQs solo si hay preguntas válidas
+        const faqs = faqQuestionsArray
+            .map((question, index) => ({
+                question: question?.trim(),
+                answer: faqAnswersArray[index]?.trim(),
+                keywords: faqKeywordsArray[index] ? faqKeywordsArray[index].split(',').map(k => k.trim()).filter(k => k) : [],
+                category: faqCategoriesArray[index]?.trim() || 'general'
+            }))
+            .filter(faq => faq.question && faq.answer); // Solo incluir FAQs con pregunta y respuesta válidas
 
         // Validaciones básicas con mensajes específicos
         const missingFields = [];
@@ -785,6 +918,29 @@ async function processForm(req, res) {
             throw new Error(`Error creando servicios: ${servicesError.message}`);
         }
 
+        // Crear FAQs si hay alguna
+        if (faqs.length > 0) {
+            const faqsWithTenant = faqs.map(faq => ({
+                tenant_id: actualTenantId,
+                question: faq.question,
+                answer: faq.answer,
+                keywords: faq.keywords,
+                category: faq.category,
+                is_active: true
+            }));
+
+            const { error: faqsError } = await supabase
+                .from('faqs')
+                .insert(faqsWithTenant);
+
+            if (faqsError) {
+                console.error(`⚠️ Error creando FAQs: ${faqsError.message}`);
+                // No fallar todo el proceso si los FAQs fallan
+            } else {
+                console.log(`✅ ${faqs.length} FAQs creados exitosamente`);
+            }
+        }
+
         // Generar enlace de autorización
         const authUrl = generateAuthUrl(actualTenantId, email);
 
@@ -805,6 +961,7 @@ async function processForm(req, res) {
             email,
             address,
             services,
+            faqs,
             authUrl,
             emailSent: true
         });
@@ -1041,6 +1198,26 @@ function showSuccessPage(res, data) {
                     </div>
                 `).join('')}
             </div>
+
+            ${data.faqs && data.faqs.length > 0 ? `
+            <div class="section">
+                <h3>❓ FAQs Configurados</h3>
+                ${data.faqs.map((faq, i) => `
+                    <div class="info-item" style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 8px;">
+                        <div><span class="label">${i+1}. ${faq.question}</span></div>
+                        <div style="margin: 5px 0; color: #666; font-size: 0.9rem;">${faq.answer}</div>
+                        ${faq.keywords.length > 0 ? `<div style="font-size: 0.8rem; color: #888;">Palabras clave: ${faq.keywords.join(', ')}</div>` : ''}
+                    </div>
+                `).join('')}
+            </div>
+            ` : `
+            <div class="section">
+                <h3>❓ FAQs</h3>
+                <div class="info-item">
+                    <span class="value">Sin FAQs configurados - Se pueden añadir después usando la API</span>
+                </div>
+            </div>
+            `}
 
             <div class="auth-section">
                 <h2>🔐 Siguiente Paso: Autorización Google Calendar</h2>

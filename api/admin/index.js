@@ -313,7 +313,7 @@ module.exports = async function handler(req, res) {
                 <div class="emoji">📊</div>
                 <h3>Ver Todos los Clientes</h3>
                 <p>Visualiza y gestiona todos los clientes registrados. Consulta su estado de configuración y enlaces de autorización.</p>
-                <a href="/admin/clients" class="btn btn-secondary">👥 Gestionar Clientes</a>
+                <a href="/admin/manage-clients" class="btn btn-secondary">👥 Gestionar Clientes</a>
             </div>
             
             <div class="action-card">

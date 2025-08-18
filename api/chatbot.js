@@ -130,6 +130,7 @@ module.exports = async (req, res) => {
           message: 'Admin Panel API',
           version: '1.0.0',
           endpoints: [
+            'GET /admin/manage-clients',
             'GET /admin/clients',
             'POST /admin/clients', 
             'PUT /admin/clients/:id',
@@ -140,6 +141,9 @@ module.exports = async (req, res) => {
           ],
           timestamp: new Date().toISOString()
         });
+        
+      case urlPath === '/admin/clients' && method === 'GET':
+        return await handleAdminGetClients(req, res);
         
       case urlPath === '/admin/clients' && method === 'POST':
         return await handleAdminCreateClient(req, res);

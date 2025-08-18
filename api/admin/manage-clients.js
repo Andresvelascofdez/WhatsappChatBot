@@ -2,7 +2,7 @@
  * 👥 GESTIÓN DE CLIENTES - PANEL VISUAL
  * 
  * Interfaz web para ver y gestionar clientes existentes
- * URL: /admin/clients (GET) - Página HTML
+ * URL: /admin/manage-clients (GET) - Página HTML
  */
 
 const { createClient } = require('@supabase/supabase-js');

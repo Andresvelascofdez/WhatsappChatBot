@@ -131,6 +131,9 @@ module.exports = async (req, res) => {
           version: '1.0.0',
           endpoints: [
             'GET /admin/manage-clients',
+            'GET /admin/client-view',
+            'GET /admin/client-edit',
+            'POST /admin/client-edit',
             'GET /admin/clients',
             'POST /admin/clients', 
             'PUT /admin/clients/:id',
@@ -146,6 +149,16 @@ module.exports = async (req, res) => {
         // Redirect to dedicated manage clients handler
         const manageClientsHandler = require('./admin/manage-clients.js');
         return await manageClientsHandler(req, res);
+        
+      case urlPath === '/admin/client-view' && method === 'GET':
+        // Redirect to dedicated client view handler
+        const clientViewHandler = require('./admin/client-view.js');
+        return await clientViewHandler(req, res);
+        
+      case urlPath === '/admin/client-edit' && (method === 'GET' || method === 'POST'):
+        // Redirect to dedicated client edit handler
+        const clientEditHandler = require('./admin/client-edit.js');
+        return await clientEditHandler(req, res);
         
       case urlPath === '/admin/clients' && method === 'GET':
         return await handleAdminGetClients(req, res);

@@ -421,9 +421,6 @@ module.exports = async function handler(req, res) {
                         <div class="client-actions">
                             <button onclick="viewClient('${tenant.id}')" class="btn btn-primary btn-sm">👁️ Ver</button>
                             <button onclick="editClient('${tenant.id}')" class="btn btn-warning btn-sm">✏️ Editar</button>
-                            <button onclick="manageServices('${tenant.id}')" class="btn btn-success btn-sm">💰 Servicios</button>
-                            <button onclick="manageFAQs('${tenant.id}')" class="btn btn-success btn-sm">❓ FAQs</button>
-                            ${!hasCalendar ? `<button onclick="connectCalendar('${tenant.id}')" class="btn btn-secondary btn-sm">📅 Calendario</button>` : ''}
                             <button onclick="toggleStatus('${tenant.id}', ${!tenant.active})" class="btn ${tenant.active ? 'btn-danger' : 'btn-success'} btn-sm">
                                 ${tenant.active ? '⏸️ Desactivar' : '▶️ Activar'}
                             </button>
@@ -454,40 +451,11 @@ module.exports = async function handler(req, res) {
 
         // Funciones de gestión
         function viewClient(clientId) {
-            window.open(\`/admin/clients/\${clientId}\`, '_blank');
+            window.open(\`/admin/client-view?id=\${clientId}\`, '_blank');
         }
 
         function editClient(clientId) {
-            window.open(\`/admin/clients/\${clientId}/edit\`, '_blank');
-        }
-
-        function manageServices(clientId) {
-            window.open(\`/admin/clients/\${clientId}/services\`, '_blank');
-        }
-
-        function manageFAQs(clientId) {
-            window.open(\`/admin/clients/\${clientId}/faqs\`, '_blank');
-        }
-
-        function connectCalendar(clientId) {
-            if (confirm('¿Deseas generar un nuevo enlace de autorización para Google Calendar?')) {
-                fetch(\`/admin/clients/\${clientId}/calendar/authorize\`, {
-                    method: 'POST'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Enlace de autorización generado. El cliente recibirá un email.');
-                        location.reload();
-                    } else {
-                        alert('Error: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    alert('Error conectando con el servidor');
-                    console.error(error);
-                });
-            }
+            window.open(\`/admin/client-edit?id=\${clientId}\`, '_blank');
         }
 
         function toggleStatus(clientId, newStatus) {

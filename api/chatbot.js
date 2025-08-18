@@ -1879,7 +1879,43 @@ async function handleAdminGetClients(req, res) {
     }
 
     const tenants = await response.json();
-    return res.status(200).json({ success: true, data: tenants });
+    
+    // Normalizar datos para el frontend
+    const normalizedTenants = tenants.map(tenant => ({
+      id: tenant.id,
+      name: tenant.name,
+      business_name: tenant.name, // Mapear para compatibilidad
+      email: tenant.email,
+      phone: tenant.phone,
+      address: tenant.address,
+      created_at: tenant.created_at,
+      updated_at: tenant.updated_at,
+      active: tenant.active,
+      settings: tenant.settings || {},
+      business_hours: tenant.business_hours || {
+        monday: { open: '09:00', close: '18:00' },
+        tuesday: { open: '09:00', close: '18:00' },
+        wednesday: { open: '09:00', close: '18:00' },
+        thursday: { open: '09:00', close: '18:00' },
+        friday: { open: '09:00', close: '18:00' },
+        saturday: { open: '09:00', close: '14:00' },
+        sunday: { closed: true }
+      },
+      slot_config: tenant.slot_config || {
+        slot_granularity: 15,
+        allow_same_day_booking: true,
+        max_advance_booking_days: 30
+      },
+      services: (tenant.services || []).map(service => ({
+        ...service,
+        price: service.price_cents ? (service.price_cents / 100) : 0,
+        duration_minutes: service.duration_min || 30
+      })),
+      faqs: tenant.faqs || [],
+      calendar_config: tenant.calendar_config
+    }));
+    
+    return res.status(200).json({ success: true, data: normalizedTenants });
   } catch (error) {
     console.error('Error fetching clients:', error);
     return res.status(500).json({ error: 'Failed to fetch clients', message: error.message });
@@ -1977,7 +2013,76 @@ async function handleAdminCreateClient(req, res) {
     }
 
     const tenant = await tenantResponse.json();
-    return res.status(201).json({ success: true, data: tenant[0] });
+    const createdTenant = tenant[0];
+    
+    // Si se proporcionaron FAQs iniciales, crearlas
+    if (clientData.faqs && Array.isArray(clientData.faqs) && clientData.faqs.length > 0) {
+      console.log('Creating initial FAQs for tenant:', createdTenant.id);
+      
+      for (const faq of clientData.faqs) {
+        if (faq.question && faq.answer) {
+          try {
+            await fetch(`${supabaseUrl}/rest/v1/faqs`, {
+              method: 'POST',
+              headers: {
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                tenant_id: createdTenant.id,
+                question: faq.question,
+                answer: faq.answer,
+                keywords: faq.keywords || [],
+                category: faq.category || 'general',
+                priority: faq.priority || 0,
+                is_active: faq.is_active !== false,
+                created_at: new Date().toISOString()
+              })
+            });
+          } catch (faqError) {
+            console.error('Error creating FAQ:', faqError);
+          }
+        }
+      }
+    }
+    
+    // Si se proporcionaron servicios iniciales, crearlos
+    if (clientData.services && Array.isArray(clientData.services) && clientData.services.length > 0) {
+      console.log('Creating initial services for tenant:', createdTenant.id);
+      
+      for (const service of clientData.services) {
+        if (service.name) {
+          try {
+            await fetch(`${supabaseUrl}/rest/v1/services`, {
+              method: 'POST',
+              headers: {
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                tenant_id: createdTenant.id,
+                name: service.name,
+                description: service.description || `Servicio de ${service.name}`,
+                price_cents: service.price ? Math.round(service.price * 100) : 0,
+                duration_min: service.duration_minutes || service.duration || 30,
+                buffer_min: service.buffer_min || 0,
+                custom_slot_duration: service.custom_slot_duration || null,
+                slot_granularity_min: service.slot_granularity_min || 15,
+                is_active: service.is_active !== false,
+                settings: service.settings || {},
+                created_at: new Date().toISOString()
+              })
+            });
+          } catch (serviceError) {
+            console.error('Error creating service:', serviceError);
+          }
+        }
+      }
+    }
+    
+    return res.status(201).json({ success: true, data: createdTenant });
   } catch (error) {
     console.error('Error creating client:', error);
     return res.status(500).json({ error: 'Failed to create client', message: error.message });
@@ -2016,6 +2121,20 @@ async function handleAdminUpdateClient(req, res, clientId) {
         // Asegurar que full_address esté completa
         updateData.address.full_address = updateData.address.full_address || 
                                          `${updateData.address.street || ''} ${updateData.address.city || ''} ${updateData.address.postal_code || ''}`.trim();
+      }
+    }
+    
+    // Asegurar que business_hours tenga la estructura correcta
+    if (updateData.business_hours) {
+      const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+      for (const day of validDays) {
+        if (updateData.business_hours[day]) {
+          const dayData = updateData.business_hours[day];
+          if (!dayData.closed && (!dayData.open || !dayData.close)) {
+            // Si no está marcado como cerrado pero no tiene horarios, usar defaults
+            updateData.business_hours[day] = { open: '09:00', close: '18:00' };
+          }
+        }
       }
     }
     
@@ -2075,7 +2194,44 @@ async function handleAdminGetClient(req, res, clientId) {
       return res.status(404).json({ error: 'Client not found' });
     }
 
-    return res.status(200).json({ success: true, data: tenants[0] });
+    const tenant = tenants[0];
+    
+    // Normalizar datos para el frontend
+    const normalizedTenant = {
+      id: tenant.id,
+      name: tenant.name,
+      business_name: tenant.name, // Mapear para compatibilidad
+      email: tenant.email,
+      phone: tenant.phone,
+      address: tenant.address,
+      created_at: tenant.created_at,
+      updated_at: tenant.updated_at,
+      active: tenant.active,
+      settings: tenant.settings || {},
+      business_hours: tenant.business_hours || {
+        monday: { open: '09:00', close: '18:00' },
+        tuesday: { open: '09:00', close: '18:00' },
+        wednesday: { open: '09:00', close: '18:00' },
+        thursday: { open: '09:00', close: '18:00' },
+        friday: { open: '09:00', close: '18:00' },
+        saturday: { open: '09:00', close: '14:00' },
+        sunday: { closed: true }
+      },
+      slot_config: tenant.slot_config || {
+        slot_granularity: 15,
+        allow_same_day_booking: true,
+        max_advance_booking_days: 30
+      },
+      services: (tenant.services || []).map(service => ({
+        ...service,
+        price: service.price_cents ? (service.price_cents / 100) : 0,
+        duration_minutes: service.duration_min || 30
+      })),
+      faqs: tenant.faqs || [],
+      calendar_config: tenant.calendar_config
+    };
+
+    return res.status(200).json({ success: true, data: normalizedTenant });
   } catch (error) {
     console.error('Error fetching client:', error);
     return res.status(500).json({ error: 'Failed to fetch client', message: error.message });

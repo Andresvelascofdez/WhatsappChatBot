@@ -142,6 +142,11 @@ module.exports = async (req, res) => {
           timestamp: new Date().toISOString()
         });
         
+      case urlPath === '/admin/manage-clients' && method === 'GET':
+        // Redirect to dedicated manage clients handler
+        const manageClientsHandler = require('./admin/manage-clients.js');
+        return await manageClientsHandler(req, res);
+        
       case urlPath === '/admin/clients' && method === 'GET':
         return await handleAdminGetClients(req, res);
         

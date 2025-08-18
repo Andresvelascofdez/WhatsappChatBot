@@ -138,11 +138,31 @@ module.exports = async (req, res) => {
         const getClientId = urlPath.split('/')[3];
         return await handleAdminGetClient(req, res, getClientId);
         
+      case urlPath.startsWith('/admin/clients/') && urlPath.endsWith('/business-hours') && method === 'PUT':
+        const businessHoursClientId = urlPath.split('/')[3];
+        return await handleAdminUpdateBusinessHours(req, res, businessHoursClientId);
+        
+      case urlPath.startsWith('/admin/clients/') && urlPath.endsWith('/faqs') && method === 'POST':
+        const faqClientId = urlPath.split('/')[3];
+        return await handleAdminCreateFAQ(req, res, faqClientId);
+        
       default:
         return res.status(404).json({
           error: 'Not Found',
           message: `Endpoint ${method} ${urlPath} not found`,
-          availableEndpoints: ['GET /', 'GET /health', 'GET /api/status', 'POST /webhook', 'GET /webhook', 'GET /admin/clients', 'POST /admin/clients', 'PUT /admin/clients/:id', 'GET /admin/clients/:id'],
+          availableEndpoints: [
+            'GET /', 
+            'GET /health', 
+            'GET /api/status', 
+            'POST /webhook', 
+            'GET /webhook', 
+            'GET /admin/clients', 
+            'POST /admin/clients', 
+            'PUT /admin/clients/:id', 
+            'GET /admin/clients/:id',
+            'PUT /admin/clients/:id/business-hours',
+            'POST /admin/clients/:id/faqs'
+          ],
           timestamp: new Date().toISOString()
         });
     }
@@ -1594,12 +1614,13 @@ async function confirmAppointment(appointmentId, customerData) {
       }
     }
     
-    // Crear evento en Google Calendar
+    // Crear evento en Google Calendar con zona horaria España
     const eventDetails = {
       summary: `${appointment.services.name} - ${customerData.name}`,
       description: `Servicio: ${appointment.services.name}\nCliente: ${customerData.name}\nTeléfono: ${customerData.phone}`,
       startDateTime: appointment.start_time,
-      endDateTime: appointment.end_time
+      endDateTime: appointment.end_time,
+      timeZone: 'Europe/Madrid'
     };
     
     const calendarResult = await createCalendarEvent(appointment.tenant_id, eventDetails);
@@ -1715,13 +1736,18 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
         );
         
         if (isAvailable) {
+          // Crear fechas para mostrar en zona horaria España
+          const madridTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "Europe/Madrid"}));
+          const displayTime = madridTime.toLocaleTimeString('es-ES', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            timeZone: 'Europe/Madrid'
+          });
+          
           slots.push({
             startTime: currentTime.toISOString(),
             endTime: slotEnd.toISOString(),
-            displayTime: currentTime.toLocaleTimeString('es-ES', { 
-              hour: '2-digit', 
-              minute: '2-digit'
-            }),
+            displayTime: displayTime,
             serviceDuration
           });
         }
@@ -1888,6 +1914,26 @@ async function handleAdminCreateClient(req, res) {
       return res.status(400).json({ error: 'Name and phone are required' });
     }
 
+    // Validar y estructurar dirección si se proporciona
+    let addressData = null;
+    if (clientData.address) {
+      if (typeof clientData.address === 'string') {
+        // Si es string, almacenar como dirección completa
+        addressData = { full_address: clientData.address };
+      } else if (typeof clientData.address === 'object') {
+        // Si es objeto, validar estructura
+        addressData = {
+          street: clientData.address.street || '',
+          city: clientData.address.city || '',
+          state: clientData.address.state || '',
+          postal_code: clientData.address.postal_code || '',
+          country: clientData.address.country || 'España',
+          full_address: clientData.address.full_address || 
+                       `${clientData.address.street || ''} ${clientData.address.city || ''} ${clientData.address.postal_code || ''}`.trim()
+        };
+      }
+    }
+
     // Crear tenant en base de datos
     const tenantResponse = await fetch(`${supabaseUrl}/rest/v1/tenants`, {
       method: 'POST',
@@ -1902,7 +1948,7 @@ async function handleAdminCreateClient(req, res) {
         business_name: clientData.business_name || clientData.name,
         phone: clientData.phone,
         email: clientData.email,
-        address: clientData.address,
+        address: addressData,
         business_hours: clientData.business_hours || {
           monday: { open: '09:00', close: '18:00' },
           tuesday: { open: '09:00', close: '18:00' },
@@ -1957,6 +2003,17 @@ async function handleAdminUpdateClient(req, res, clientId) {
     }
 
     const updateData = JSON.parse(body);
+    
+    // Procesar dirección si se proporciona
+    if (updateData.address) {
+      if (typeof updateData.address === 'string') {
+        updateData.address = { full_address: updateData.address };
+      } else if (typeof updateData.address === 'object' && updateData.address.street) {
+        // Asegurar que full_address esté completa
+        updateData.address.full_address = updateData.address.full_address || 
+                                         `${updateData.address.street || ''} ${updateData.address.city || ''} ${updateData.address.postal_code || ''}`.trim();
+      }
+    }
     
     // Actualizar tenant en base de datos
     const response = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
@@ -2018,5 +2075,160 @@ async function handleAdminGetClient(req, res, clientId) {
   } catch (error) {
     console.error('Error fetching client:', error);
     return res.status(500).json({ error: 'Failed to fetch client', message: error.message });
+  }
+}
+
+// PUT /admin/clients/:id/business-hours - Actualizar horarios de negocio
+async function handleAdminUpdateBusinessHours(req, res, clientId) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({ error: 'Supabase credentials not configured' });
+    }
+
+    // Parse request body
+    let body = '';
+    if (req.body) {
+      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    } else {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      body = Buffer.concat(chunks).toString();
+    }
+
+    const businessHoursData = JSON.parse(body);
+    
+    // Validar estructura de horarios de negocio
+    const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    for (const day of validDays) {
+      if (businessHoursData[day]) {
+        const dayData = businessHoursData[day];
+        if (!dayData.closed && (!dayData.open || !dayData.close)) {
+          return res.status(400).json({ 
+            error: `Invalid business hours for ${day}. Must have 'open' and 'close' times or 'closed: true'` 
+          });
+        }
+      }
+    }
+
+    // Actualizar horarios de negocio en base de datos
+    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        business_hours: businessHoursData,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update business hours: ${errorText}`);
+    }
+
+    const tenant = await response.json();
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Business hours updated successfully',
+      data: tenant[0] 
+    });
+  } catch (error) {
+    console.error('Error updating business hours:', error);
+    return res.status(500).json({ error: 'Failed to update business hours', message: error.message });
+  }
+}
+
+// POST /admin/clients/:id/faqs - Crear nueva FAQ para tenant
+async function handleAdminCreateFAQ(req, res, clientId) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({ error: 'Supabase credentials not configured' });
+    }
+
+    // Parse request body
+    let body = '';
+    if (req.body) {
+      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    } else {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      body = Buffer.concat(chunks).toString();
+    }
+
+    const faqData = JSON.parse(body);
+    
+    // Validaciones básicas
+    if (!faqData.question || !faqData.answer) {
+      return res.status(400).json({ error: 'Question and answer are required' });
+    }
+
+    // Verificar que el tenant existe
+    const tenantCheck = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!tenantCheck.ok) {
+      throw new Error('Error checking tenant');
+    }
+
+    const tenants = await tenantCheck.json();
+    if (tenants.length === 0) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    // Crear FAQ en base de datos
+    const faqResponse = await fetch(`${supabaseUrl}/rest/v1/faqs`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        tenant_id: clientId,
+        question: faqData.question,
+        answer: faqData.answer,
+        keywords: faqData.keywords || [],
+        category: faqData.category || 'general',
+        priority: faqData.priority || 0,
+        is_active: faqData.is_active !== false, // Por defecto true
+        created_at: new Date().toISOString()
+      })
+    });
+
+    if (!faqResponse.ok) {
+      const errorText = await faqResponse.text();
+      throw new Error(`Failed to create FAQ: ${errorText}`);
+    }
+
+    const faq = await faqResponse.json();
+    return res.status(201).json({ 
+      success: true, 
+      message: 'FAQ created successfully',
+      data: faq[0] 
+    });
+  } catch (error) {
+    console.error('Error creating FAQ:', error);
+    return res.status(500).json({ error: 'Failed to create FAQ', message: error.message });
   }
 }

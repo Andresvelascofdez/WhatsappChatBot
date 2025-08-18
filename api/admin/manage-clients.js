@@ -30,7 +30,6 @@ module.exports = async function handler(req, res) {
                 created_at,
                 updated_at,
                 active,
-                business_hours,
                 slot_config,
                 calendar_config,
                 services (*),

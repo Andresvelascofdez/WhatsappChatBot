@@ -1050,9 +1050,18 @@ async function handlePostEdit(req, res) {
 
         // Parse form data
         let body = '';
+        let parsedData = {};
+
+        console.log('=== DEBUGGING EDIT REQUEST ===');
+        console.log('Request headers:', req.headers);
+        console.log('Request method:', req.method);
+        console.log('Request body type:', typeof req.body);
+        
         if (req.body) {
+            console.log('Request body exists:', req.body);
             body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
         } else {
+            console.log('Reading body from chunks...');
             const chunks = [];
             for await (const chunk of req) {
                 chunks.push(chunk);
@@ -1060,13 +1069,18 @@ async function handlePostEdit(req, res) {
             body = Buffer.concat(chunks).toString();
         }
 
-        console.log('=== DEBUGGING EDIT REQUEST ===');
-        console.log('Raw body:', body);
+        console.log('Raw body length:', body.length);
+        console.log('Raw body preview:', body.substring(0, 200));
+
+        // Verificar si el body está vacío
+        if (!body || body.trim() === '') {
+            throw new Error('Datos del formulario vacíos - verifique el envío del formulario');
+        }
 
         const formData = new URLSearchParams(body);
-        const parsedData = {};
         
         for (let [key, value] of formData.entries()) {
+            console.log(`Field: ${key} = ${value}`);
             if (key.endsWith('[]')) {
                 const baseKey = key.slice(0, -2);
                 if (!parsedData[baseKey]) parsedData[baseKey] = [];
@@ -1076,6 +1090,7 @@ async function handlePostEdit(req, res) {
             }
         }
 
+        console.log('Parsed data keys:', Object.keys(parsedData));
         console.log('Parsed data:', parsedData);
 
         // Extraer campos básicos

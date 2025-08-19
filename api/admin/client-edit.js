@@ -88,27 +88,11 @@ function generateScheduleHTML(businessHours) {
         const isClosed = dayData.closed === true;
         const isSplit = !!(dayData.morning && dayData.afternoon);
         
-        // Valores por defecto
-        let openTime = '09:00';
-        let closeTime = '18:00';
-        let lunchCloseTime = '14:00';
-        let lunchOpenTime = '16:00';
-
-        if (isSplit) {
-            // Jornada partida - verificar que existen los objetos antes de acceder
-            if (dayData.morning) {
-                openTime = dayData.morning.open || '09:00';
-                lunchCloseTime = dayData.morning.close || '14:00';
-            }
-            if (dayData.afternoon) {
-                lunchOpenTime = dayData.afternoon.open || '16:00';
-                closeTime = dayData.afternoon.close || '18:00';
-            }
-        } else if (!isClosed && dayData.open) {
-            // Jornada normal
-            openTime = dayData.open || '09:00';
-            closeTime = dayData.close || '18:00';
-        }
+        // Valores seguros para todos los casos
+        const openTime = isSplit && dayData.morning && dayData.morning.open ? dayData.morning.open : (dayData.open || '09:00');
+        const closeTime = isSplit && dayData.afternoon && dayData.afternoon.close ? dayData.afternoon.close : (dayData.close || '18:00');
+        const lunchCloseTime = isSplit && dayData.morning && dayData.morning.close ? dayData.morning.close : '14:00';
+        const lunchOpenTime = isSplit && dayData.afternoon && dayData.afternoon.open ? dayData.afternoon.open : '16:00';
 
         return `
         <div class="day-schedule" data-day="${day.key}">

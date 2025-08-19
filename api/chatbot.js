@@ -1099,9 +1099,19 @@ function getBusinessHoursText(businessHours) {
     const dayHours = businessHours[key];
     if (dayHours) {
       if (dayHours.closed) {
-        hoursText += `📅 *${dayName}*: Cerrado\n`;
+        hoursText += `📅 ${dayName}: Cerrado\n`;
+      } else if (dayHours.morning && dayHours.afternoon) {
+        // Jornada partida
+        const morningOpen = dayHours.morning.open || '09:00';
+        const morningClose = dayHours.morning.close || '14:00';
+        const afternoonOpen = dayHours.afternoon.open || '16:00';
+        const afternoonClose = dayHours.afternoon.close || '18:00';
+        hoursText += `📅 ${dayName}: ${morningOpen} - ${morningClose} y ${afternoonOpen} - ${afternoonClose}\n`;
       } else {
-        hoursText += `📅 *${dayName}*: ${dayHours.open} - ${dayHours.close}\n`;
+        // Jornada normal
+        const openTime = dayHours.open || '09:00';
+        const closeTime = dayHours.close || '18:00';
+        hoursText += `📅 ${dayName}: ${openTime} - ${closeTime}\n`;
       }
     }
   });

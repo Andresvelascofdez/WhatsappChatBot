@@ -94,12 +94,12 @@ function generateScheduleHTML(businessHours) {
         let lunchOpenTime = '16:00';
 
         if (isSplit) {
-            openTime = dayData.morning?.open || '09:00';
-            lunchCloseTime = dayData.morning?.close || '14:00';
-            lunchOpenTime = dayData.afternoon?.open || '16:00';
-            closeTime = dayData.afternoon?.close || '18:00';
+            openTime = (dayData.morning && dayData.morning.open) ? dayData.morning.open : '09:00';
+            lunchCloseTime = (dayData.morning && dayData.morning.close) ? dayData.morning.close : '14:00';
+            lunchOpenTime = (dayData.afternoon && dayData.afternoon.open) ? dayData.afternoon.open : '16:00';
+            closeTime = (dayData.afternoon && dayData.afternoon.close) ? dayData.afternoon.close : '18:00';
         } else if (!isClosed && dayData.open) {
-            openTime = dayData.open;
+            openTime = dayData.open || '09:00';
             closeTime = dayData.close || '18:00';
         }
 
@@ -122,21 +122,21 @@ function generateScheduleHTML(businessHours) {
                 <div class="time-group">
                     <div class="time-input">
                         <label>Apertura</label>
-                        <input type="time" name="${day.key}_open" value="${openTime}" ${isClosed ? 'disabled' : ''}>
+                        <input type="time" name="${day.key}_open" value="${openTime || '09:00'}" ${isClosed ? 'disabled' : ''}>
                     </div>
                     <div class="time-input">
                         <label>Cierre</label>
-                        <input type="time" name="${day.key}_close" value="${closeTime}" ${isClosed ? 'disabled' : ''}>
+                        <input type="time" name="${day.key}_close" value="${closeTime || '18:00'}" ${isClosed ? 'disabled' : ''}>
                     </div>
                 </div>
                 <div class="time-group split-times" id="${day.key}_split_times" ${!isSplit ? 'style="display: none;"' : ''}>
                     <div class="time-input">
                         <label>Cierre mediodía</label>
-                        <input type="time" name="${day.key}_lunch_close" value="${lunchCloseTime}" ${isClosed ? 'disabled' : ''}>
+                        <input type="time" name="${day.key}_lunch_close" value="${lunchCloseTime || '14:00'}" ${isClosed ? 'disabled' : ''}>
                     </div>
                     <div class="time-input">
                         <label>Apertura tarde</label>
-                        <input type="time" name="${day.key}_lunch_open" value="${lunchOpenTime}" ${isClosed ? 'disabled' : ''}>
+                        <input type="time" name="${day.key}_lunch_open" value="${lunchOpenTime || '16:00'}" ${isClosed ? 'disabled' : ''}>
                     </div>
                 </div>
             </div>
@@ -172,7 +172,7 @@ function generateServicesHTML(services) {
             </div>
             <div class="form-group">
                 <label>Precio (€) *</label>
-                <input type="number" name="servicePrice[]" required step="0.01" min="0" value="${(service.price_cents || 0) / 100}" style="font-size: 1.1rem; padding: 12px;">
+                <input type="number" name="servicePrice[]" required step="0.01" min="0" value="${service.price_cents ? (service.price_cents / 100).toFixed(2) : '0.00'}" style="font-size: 1.1rem; padding: 12px;">
             </div>
             <div class="form-group">
                 <label>Duración (min) *</label>
@@ -1259,10 +1259,10 @@ async function handlePostEdit(req, res) {
             throw new Error(`Error actualizando cliente: ${tenantError.message}`);
         }
 
-        // Desactivar servicios anteriores
+        // Eliminar servicios anteriores
         await supabase
             .from('services')
-            .update({ is_active: false })
+            .delete()
             .eq('tenant_id', clientId);
 
         // Crear nuevos servicios
@@ -1287,10 +1287,10 @@ async function handlePostEdit(req, res) {
             }
         }
 
-        // Desactivar FAQs anteriores
+        // Eliminar FAQs anteriores
         await supabase
             .from('faqs')
-            .update({ is_active: false })
+            .delete()
             .eq('tenant_id', clientId);
 
         // Crear nuevas FAQs

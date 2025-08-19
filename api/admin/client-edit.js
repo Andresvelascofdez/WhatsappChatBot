@@ -981,32 +981,79 @@ function showEditForm(res, client, services, faqs) {
         document.getElementById('clientForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
+            console.log('=== FORM SUBMISSION DEBUG ===');
+            
             // Mostrar loading
             document.getElementById('loading').style.display = 'flex';
             
-            // Enviar formulario
+            // Crear FormData del formulario
             const formData = new FormData(this);
+            
+            // Debug: mostrar todos los campos del formulario
+            console.log('FormData entries:');
+            for (let [key, value] of formData.entries()) {
+                console.log(key + ': ' + value);
+            }
+            
+            // Verificar campos críticos
+            const businessName = formData.get('businessName');
+            const phoneNumber = formData.get('phoneNumber');
+            const email = formData.get('email');
+            
+            console.log('Critical fields check:');
+            console.log('businessName:', businessName);
+            console.log('phoneNumber:', phoneNumber);
+            console.log('email:', email);
+            
+            if (!businessName || !phoneNumber || !email) {
+                alert('Error: Faltan campos obligatorios (Nombre, Teléfono, Email)');
+                document.getElementById('loading').style.display = 'none';
+                return;
+            }
+            
+            // Convertir FormData a URLSearchParams para envío
             const urlParams = new URLSearchParams();
             
-            // Convertir FormData a URLSearchParams
+            // Agregar todos los campos
             for (let [key, value] of formData.entries()) {
                 urlParams.append(key, value);
             }
+            
+            const bodyString = urlParams.toString();
+            console.log('Body string length:', bodyString.length);
+            console.log('Body string preview:', bodyString.substring(0, 300));
+            
+            // Verificar que el body no esté vacío
+            if (!bodyString || bodyString.length === 0) {
+                alert('Error: No se pudieron procesar los datos del formulario');
+                document.getElementById('loading').style.display = 'none';
+                return;
+            }
+            
+            // Enviar formulario
+            console.log('Sending request to:', window.location.href);
+            console.log('Content-Type: application/x-www-form-urlencoded');
             
             fetch(window.location.href, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
-                body: urlParams.toString()
+                body: bodyString
             })
-            .then(response => response.text())
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                return response.text();
+            })
             .then(html => {
+                console.log('Response received, updating page...');
                 document.body.innerHTML = html;
             })
             .catch(error => {
+                console.error('Fetch error:', error);
                 document.getElementById('loading').style.display = 'none';
-                alert('Error: ' + error.message);
+                alert('Error de red: ' + error.message);
             });
         });
 
@@ -1048,20 +1095,27 @@ async function handlePostEdit(req, res) {
             return res.status(400).json({ error: 'Client ID is required' });
         }
 
-        // Parse form data
+        console.log('=== DEBUGGING EDIT REQUEST ===');
+        console.log('Client ID:', clientId);
+        console.log('Request headers:', req.headers);
+        console.log('Request method:', req.method);
+        console.log('Content-Type:', req.headers['content-type']);
+
+        // Manejo mejorado del body para Vercel
         let body = '';
         let parsedData = {};
 
-        console.log('=== DEBUGGING EDIT REQUEST ===');
-        console.log('Request headers:', req.headers);
-        console.log('Request method:', req.method);
-        console.log('Request body type:', typeof req.body);
-        
-        if (req.body) {
-            console.log('Request body exists:', req.body);
-            body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        // En Vercel, el body ya puede venir parseado como string
+        if (typeof req.body === 'string') {
+            body = req.body;
+            console.log('Body es string directo');
+        } else if (req.body && typeof req.body === 'object') {
+            // Si ya es un objeto, puede que Vercel lo haya parseado
+            console.log('Body es objeto, usando directamente');
+            parsedData = req.body;
         } else {
-            console.log('Reading body from chunks...');
+            // Leer chunks manualmente
+            console.log('Leyendo body de chunks...');
             const chunks = [];
             for await (const chunk of req) {
                 chunks.push(chunk);
@@ -1070,28 +1124,40 @@ async function handlePostEdit(req, res) {
         }
 
         console.log('Raw body length:', body.length);
-        console.log('Raw body preview:', body.substring(0, 200));
+        console.log('Raw body preview:', body.substring(0, 300));
 
-        // Verificar si el body está vacío
-        if (!body || body.trim() === '') {
-            throw new Error('Datos del formulario vacíos - verifique el envío del formulario');
-        }
-
-        const formData = new URLSearchParams(body);
-        
-        for (let [key, value] of formData.entries()) {
-            console.log(`Field: ${key} = ${value}`);
-            if (key.endsWith('[]')) {
-                const baseKey = key.slice(0, -2);
-                if (!parsedData[baseKey]) parsedData[baseKey] = [];
-                parsedData[baseKey].push(value);
-            } else {
-                parsedData[key] = value;
+        // Si tenemos body como string, parsearlo
+        if (body && Object.keys(parsedData).length === 0) {
+            try {
+                const formData = new URLSearchParams(body);
+                for (let [key, value] of formData.entries()) {
+                    console.log(`Field: ${key} = ${value}`);
+                    if (key.endsWith('[]')) {
+                        const baseKey = key.slice(0, -2);
+                        if (!parsedData[baseKey]) parsedData[baseKey] = [];
+                        parsedData[baseKey].push(value);
+                    } else {
+                        parsedData[key] = value;
+                    }
+                }
+            } catch (parseError) {
+                console.error('Error parsing form data:', parseError);
+                throw new Error(`Error parsing form data: ${parseError.message}`);
             }
         }
 
         console.log('Parsed data keys:', Object.keys(parsedData));
-        console.log('Parsed data:', parsedData);
+        console.log('Fields found:', Object.keys(parsedData).length);
+
+        // Verificar campos básicos
+        console.log('businessName:', parsedData.businessName);
+        console.log('phoneNumber:', parsedData.phoneNumber);
+        console.log('email:', parsedData.email);
+
+        // Verificar si el formulario está vacío
+        if (Object.keys(parsedData).length === 0) {
+            throw new Error('No se recibieron datos del formulario. Verifique que el formulario se envíe correctamente.');
+        }
 
         // Extraer campos básicos
         const businessName = parsedData.businessName;

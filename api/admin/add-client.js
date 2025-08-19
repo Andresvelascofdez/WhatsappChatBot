@@ -418,6 +418,143 @@ function showForm(res) {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Estilos para Horarios de Trabajo */
+        .schedule-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 15px;
+            border: 2px solid #e1e5e9;
+        }
+
+        .day-schedule {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9ff;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .day-header h4 {
+            margin: 0;
+            color: #333;
+            font-size: 1.1rem;
+        }
+
+        .day-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            color: #666;
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+
+        .schedule-times {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .time-group {
+            display: flex;
+            gap: 15px;
+            align-items: end;
+        }
+
+        .time-input {
+            flex: 1;
+        }
+
+        .time-input label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .time-input input[type="time"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .time-input input[type="time"]:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .split-times {
+            padding-left: 20px;
+            border-left: 2px solid #ddd;
+        }
+
+        .schedule-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #e1e5e9;
+        }
+
+        .schedule-actions button {
+            flex: 1;
+            padding: 10px 15px;
+            font-size: 14px;
+        }
+
+        .day-schedule.closed {
+            opacity: 0.6;
+            background: #f5f5f5;
+        }
+
+        .day-schedule.closed .schedule-times {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .day-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .day-controls {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+
+            .time-group {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .schedule-actions {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -475,6 +612,294 @@ function showForm(res) {
                     <label for="address">Dirección (opcional)</label>
                     <input type="text" id="address" name="address" 
                            placeholder="Calle Mayor 50, Madrid">
+                </div>
+            </div>
+
+            <!-- Horarios de Trabajo -->
+            <div class="section">
+                <h3>🕒 Horarios de Trabajo</h3>
+                
+                <div class="info-box">
+                    <h4>⏰ Configuración de Horarios</h4>
+                    <p>Define los horarios de atención para cada día de la semana:</p>
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li>✅ <strong>Jornada partida:</strong> Permite configurar apertura y cierre en dos horarios</li>
+                        <li>✅ <strong>Día cerrado:</strong> Marca días sin atención</li>
+                        <li>✅ <strong>Citas automáticas:</strong> Solo se permiten reservas en horarios configurados</li>
+                    </ul>
+                </div>
+
+                <div class="schedule-container" id="scheduleContainer">
+                    <div class="day-schedule" data-day="monday">
+                        <div class="day-header">
+                            <h4>📅 Lunes</h4>
+                            <div class="day-controls">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="monday_closed" onchange="toggleDayClosed('monday', this)">
+                                    <span>Cerrado</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="monday_split" onchange="toggleSplitDay('monday', this)">
+                                    <span>Jornada partida</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="schedule-times" id="monday_times">
+                            <div class="time-group">
+                                <div class="time-input">
+                                    <label>Apertura</label>
+                                    <input type="time" name="monday_open" value="09:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Cierre</label>
+                                    <input type="time" name="monday_close" value="18:00">
+                                </div>
+                            </div>
+                            <div class="time-group split-times" id="monday_split_times" style="display: none;">
+                                <div class="time-input">
+                                    <label>Cierre mediodía</label>
+                                    <input type="time" name="monday_lunch_close" value="14:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Apertura tarde</label>
+                                    <input type="time" name="monday_lunch_open" value="16:00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="day-schedule" data-day="tuesday">
+                        <div class="day-header">
+                            <h4>📅 Martes</h4>
+                            <div class="day-controls">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="tuesday_closed" onchange="toggleDayClosed('tuesday', this)">
+                                    <span>Cerrado</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="tuesday_split" onchange="toggleSplitDay('tuesday', this)">
+                                    <span>Jornada partida</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="schedule-times" id="tuesday_times">
+                            <div class="time-group">
+                                <div class="time-input">
+                                    <label>Apertura</label>
+                                    <input type="time" name="tuesday_open" value="09:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Cierre</label>
+                                    <input type="time" name="tuesday_close" value="18:00">
+                                </div>
+                            </div>
+                            <div class="time-group split-times" id="tuesday_split_times" style="display: none;">
+                                <div class="time-input">
+                                    <label>Cierre mediodía</label>
+                                    <input type="time" name="tuesday_lunch_close" value="14:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Apertura tarde</label>
+                                    <input type="time" name="tuesday_lunch_open" value="16:00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="day-schedule" data-day="wednesday">
+                        <div class="day-header">
+                            <h4>📅 Miércoles</h4>
+                            <div class="day-controls">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="wednesday_closed" onchange="toggleDayClosed('wednesday', this)">
+                                    <span>Cerrado</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="wednesday_split" onchange="toggleSplitDay('wednesday', this)">
+                                    <span>Jornada partida</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="schedule-times" id="wednesday_times">
+                            <div class="time-group">
+                                <div class="time-input">
+                                    <label>Apertura</label>
+                                    <input type="time" name="wednesday_open" value="09:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Cierre</label>
+                                    <input type="time" name="wednesday_close" value="18:00">
+                                </div>
+                            </div>
+                            <div class="time-group split-times" id="wednesday_split_times" style="display: none;">
+                                <div class="time-input">
+                                    <label>Cierre mediodía</label>
+                                    <input type="time" name="wednesday_lunch_close" value="14:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Apertura tarde</label>
+                                    <input type="time" name="wednesday_lunch_open" value="16:00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="day-schedule" data-day="thursday">
+                        <div class="day-header">
+                            <h4>📅 Jueves</h4>
+                            <div class="day-controls">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="thursday_closed" onchange="toggleDayClosed('thursday', this)">
+                                    <span>Cerrado</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="thursday_split" onchange="toggleSplitDay('thursday', this)">
+                                    <span>Jornada partida</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="schedule-times" id="thursday_times">
+                            <div class="time-group">
+                                <div class="time-input">
+                                    <label>Apertura</label>
+                                    <input type="time" name="thursday_open" value="09:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Cierre</label>
+                                    <input type="time" name="thursday_close" value="18:00">
+                                </div>
+                            </div>
+                            <div class="time-group split-times" id="thursday_split_times" style="display: none;">
+                                <div class="time-input">
+                                    <label>Cierre mediodía</label>
+                                    <input type="time" name="thursday_lunch_close" value="14:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Apertura tarde</label>
+                                    <input type="time" name="thursday_lunch_open" value="16:00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="day-schedule" data-day="friday">
+                        <div class="day-header">
+                            <h4>📅 Viernes</h4>
+                            <div class="day-controls">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="friday_closed" onchange="toggleDayClosed('friday', this)">
+                                    <span>Cerrado</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="friday_split" onchange="toggleSplitDay('friday', this)">
+                                    <span>Jornada partida</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="schedule-times" id="friday_times">
+                            <div class="time-group">
+                                <div class="time-input">
+                                    <label>Apertura</label>
+                                    <input type="time" name="friday_open" value="09:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Cierre</label>
+                                    <input type="time" name="friday_close" value="18:00">
+                                </div>
+                            </div>
+                            <div class="time-group split-times" id="friday_split_times" style="display: none;">
+                                <div class="time-input">
+                                    <label>Cierre mediodía</label>
+                                    <input type="time" name="friday_lunch_close" value="14:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Apertura tarde</label>
+                                    <input type="time" name="friday_lunch_open" value="16:00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="day-schedule" data-day="saturday">
+                        <div class="day-header">
+                            <h4>📅 Sábado</h4>
+                            <div class="day-controls">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="saturday_closed" onchange="toggleDayClosed('saturday', this)">
+                                    <span>Cerrado</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="saturday_split" onchange="toggleSplitDay('saturday', this)">
+                                    <span>Jornada partida</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="schedule-times" id="saturday_times">
+                            <div class="time-group">
+                                <div class="time-input">
+                                    <label>Apertura</label>
+                                    <input type="time" name="saturday_open" value="09:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Cierre</label>
+                                    <input type="time" name="saturday_close" value="14:00">
+                                </div>
+                            </div>
+                            <div class="time-group split-times" id="saturday_split_times" style="display: none;">
+                                <div class="time-input">
+                                    <label>Cierre mediodía</label>
+                                    <input type="time" name="saturday_lunch_close" value="14:00">
+                                </div>
+                                <div class="time-input">
+                                    <label>Apertura tarde</label>
+                                    <input type="time" name="saturday_lunch_open" value="16:00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="day-schedule" data-day="sunday">
+                        <div class="day-header">
+                            <h4>📅 Domingo</h4>
+                            <div class="day-controls">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="sunday_closed" checked onchange="toggleDayClosed('sunday', this)">
+                                    <span>Cerrado</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="sunday_split" onchange="toggleSplitDay('sunday', this)" disabled>
+                                    <span>Jornada partida</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="schedule-times" id="sunday_times" style="display: none;">
+                            <div class="time-group">
+                                <div class="time-input">
+                                    <label>Apertura</label>
+                                    <input type="time" name="sunday_open" value="09:00" disabled>
+                                </div>
+                                <div class="time-input">
+                                    <label>Cierre</label>
+                                    <input type="time" name="sunday_close" value="18:00" disabled>
+                                </div>
+                            </div>
+                            <div class="time-group split-times" id="sunday_split_times" style="display: none;">
+                                <div class="time-input">
+                                    <label>Cierre mediodía</label>
+                                    <input type="time" name="sunday_lunch_close" value="14:00" disabled>
+                                </div>
+                                <div class="time-input">
+                                    <label>Apertura tarde</label>
+                                    <input type="time" name="sunday_lunch_open" value="16:00" disabled>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="schedule-actions">
+                    <button type="button" class="btn btn-secondary" onclick="copySchedule('monday')">📋 Copiar Lunes a Toda la Semana</button>
+                    <button type="button" class="btn btn-secondary" onclick="setWeekendClosed()">🏖️ Cerrar Fines de Semana</button>
                 </div>
             </div>
 
@@ -739,6 +1164,104 @@ function showForm(res) {
         document.getElementById('phoneNumber').addEventListener('input', function(e) {
             this.value = this.value.replace(/[^0-9]/g, '');
         });
+
+        // Funciones para manejo de horarios
+        function toggleDayClosed(day, checkbox) {
+            const timesContainer = document.getElementById(day + '_times');
+            const splitCheckbox = document.querySelector('input[name="' + day + '_split"]');
+            const timeInputs = timesContainer.querySelectorAll('input[type="time"]');
+            
+            if (checkbox.checked) {
+                // Día cerrado
+                timesContainer.style.display = 'none';
+                splitCheckbox.disabled = true;
+                splitCheckbox.checked = false;
+                timeInputs.forEach(input => input.disabled = true);
+                
+                // Agregar clase visual
+                const daySchedule = document.querySelector('[data-day="' + day + '"]');
+                daySchedule.classList.add('closed');
+            } else {
+                // Día abierto
+                timesContainer.style.display = 'flex';
+                splitCheckbox.disabled = false;
+                timeInputs.forEach(input => input.disabled = false);
+                
+                // Quitar clase visual
+                const daySchedule = document.querySelector('[data-day="' + day + '"]');
+                daySchedule.classList.remove('closed');
+            }
+        }
+
+        function toggleSplitDay(day, checkbox) {
+            const splitTimesContainer = document.getElementById(day + '_split_times');
+            
+            if (checkbox.checked) {
+                splitTimesContainer.style.display = 'flex';
+            } else {
+                splitTimesContainer.style.display = 'none';
+            }
+        }
+
+        function copySchedule(sourceDay) {
+            const sourceOpen = document.querySelector('input[name="' + sourceDay + '_open"]').value;
+            const sourceClose = document.querySelector('input[name="' + sourceDay + '_close"]').value;
+            const sourceSplit = document.querySelector('input[name="' + sourceDay + '_split"]').checked;
+            const sourceClosed = document.querySelector('input[name="' + sourceDay + '_closed"]').checked;
+            
+            let sourceLunchClose = '';
+            let sourceLunchOpen = '';
+            
+            if (sourceSplit) {
+                sourceLunchClose = document.querySelector('input[name="' + sourceDay + '_lunch_close"]').value;
+                sourceLunchOpen = document.querySelector('input[name="' + sourceDay + '_lunch_open"]').value;
+            }
+            
+            const days = ['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            
+            days.forEach(day => {
+                // Copiar horarios básicos
+                document.querySelector('input[name="' + day + '_open"]').value = sourceOpen;
+                document.querySelector('input[name="' + day + '_close"]').value = sourceClose;
+                
+                // Copiar estado cerrado
+                const closedCheckbox = document.querySelector('input[name="' + day + '_closed"]');
+                closedCheckbox.checked = sourceClosed;
+                toggleDayClosed(day, closedCheckbox);
+                
+                // Copiar jornada partida
+                const splitCheckbox = document.querySelector('input[name="' + day + '_split"]');
+                splitCheckbox.checked = sourceSplit;
+                toggleSplitDay(day, splitCheckbox);
+                
+                if (sourceSplit) {
+                    document.querySelector('input[name="' + day + '_lunch_close"]').value = sourceLunchClose;
+                    document.querySelector('input[name="' + day + '_lunch_open"]').value = sourceLunchOpen;
+                }
+            });
+            
+            alert('✅ Horario del lunes copiado a toda la semana laboral');
+        }
+
+        function setWeekendClosed() {
+            // Cerrar sábado
+            const saturdayCheckbox = document.querySelector('input[name="saturday_closed"]');
+            saturdayCheckbox.checked = true;
+            toggleDayClosed('saturday', saturdayCheckbox);
+            
+            // Cerrar domingo (ya está cerrado por defecto)
+            const sundayCheckbox = document.querySelector('input[name="sunday_closed"]');
+            sundayCheckbox.checked = true;
+            toggleDayClosed('sunday', sundayCheckbox);
+            
+            alert('✅ Fines de semana configurados como cerrados');
+        }
+
+        // Inicializar domingo como cerrado por defecto
+        document.addEventListener('DOMContentLoaded', function() {
+            const sundayCheckbox = document.querySelector('input[name="sunday_closed"]');
+            toggleDayClosed('sunday', sundayCheckbox);
+        });
     </script>
 </body>
 </html>`;
@@ -818,6 +1341,34 @@ async function processForm(req, res) {
         const faqKeywords = parsedData['faqKeywords[]'] || [];
         const faqCategories = parsedData['faqCategory[]'] || [];
 
+        // Extraer horarios de trabajo
+        const businessHours = {};
+        const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        
+        days.forEach(day => {
+            const isClosed = parsedData[day + '_closed'] === 'on';
+            const isSplit = parsedData[day + '_split'] === 'on';
+            
+            if (isClosed) {
+                businessHours[day] = { closed: true };
+            } else {
+                const open = parsedData[day + '_open'] || '09:00';
+                const close = parsedData[day + '_close'] || '18:00';
+                
+                if (isSplit) {
+                    const lunchClose = parsedData[day + '_lunch_close'] || '14:00';
+                    const lunchOpen = parsedData[day + '_lunch_open'] || '16:00';
+                    
+                    businessHours[day] = {
+                        morning: { open, close: lunchClose },
+                        afternoon: { open: lunchOpen, close }
+                    };
+                } else {
+                    businessHours[day] = { open, close };
+                }
+            }
+        });
+
         console.log('=== EXTRACTED DATA ===');
         console.log('Fields:', { tenantId, businessName, phoneNumber, email, address });
         console.log('Services:', { serviceNames, servicePrices, serviceDurations });
@@ -888,7 +1439,8 @@ async function processForm(req, res) {
                 tz: timezone,
                 locale: 'es',
                 active: true,
-                slot_config: slotConfig
+                slot_config: slotConfig,
+                business_hours: businessHours // Agregar horarios de trabajo
             }])
             .select();
 

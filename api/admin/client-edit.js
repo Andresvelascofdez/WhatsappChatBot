@@ -95,11 +95,15 @@ function generateScheduleHTML(businessHours) {
         let lunchOpenTime = '16:00';
 
         if (isSplit) {
-            // Jornada partida
-            openTime = dayData.morning.open || '09:00';
-            lunchCloseTime = dayData.morning.close || '14:00';
-            lunchOpenTime = dayData.afternoon.open || '16:00';
-            closeTime = dayData.afternoon.close || '18:00';
+            // Jornada partida - verificar que existen los objetos antes de acceder
+            if (dayData.morning) {
+                openTime = dayData.morning.open || '09:00';
+                lunchCloseTime = dayData.morning.close || '14:00';
+            }
+            if (dayData.afternoon) {
+                lunchOpenTime = dayData.afternoon.open || '16:00';
+                closeTime = dayData.afternoon.close || '18:00';
+            }
         } else if (!isClosed && dayData.open) {
             // Jornada normal
             openTime = dayData.open || '09:00';

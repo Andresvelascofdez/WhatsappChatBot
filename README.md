@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 
-## 🚀 **Estado del Sistema - ¡COMPLETAMENTE FUNCIONAL!**
+## 🚀 **Estado del Sistema - ¡COMPLETAMENTE FUNCIONAL!** ✨
 
 | Componente | Estado | Funcionalidad |
 |------------|--------|---------------|

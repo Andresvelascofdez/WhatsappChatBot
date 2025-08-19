@@ -85,20 +85,23 @@ function generateScheduleHTML(businessHours) {
 
     return days.map(day => {
         const dayData = businessHours[day.key] || {};
-        const isClosed = dayData.closed || false;
-        const isSplit = dayData.morning && dayData.afternoon;
+        const isClosed = dayData.closed === true;
+        const isSplit = !!(dayData.morning && dayData.afternoon);
         
+        // Valores por defecto
         let openTime = '09:00';
         let closeTime = '18:00';
         let lunchCloseTime = '14:00';
         let lunchOpenTime = '16:00';
 
         if (isSplit) {
-            openTime = (dayData.morning && dayData.morning.open) ? dayData.morning.open : '09:00';
-            lunchCloseTime = (dayData.morning && dayData.morning.close) ? dayData.morning.close : '14:00';
-            lunchOpenTime = (dayData.afternoon && dayData.afternoon.open) ? dayData.afternoon.open : '16:00';
-            closeTime = (dayData.afternoon && dayData.afternoon.close) ? dayData.afternoon.close : '18:00';
+            // Jornada partida
+            openTime = dayData.morning.open || '09:00';
+            lunchCloseTime = dayData.morning.close || '14:00';
+            lunchOpenTime = dayData.afternoon.open || '16:00';
+            closeTime = dayData.afternoon.close || '18:00';
         } else if (!isClosed && dayData.open) {
+            // Jornada normal
             openTime = dayData.open || '09:00';
             closeTime = dayData.close || '18:00';
         }
@@ -122,21 +125,21 @@ function generateScheduleHTML(businessHours) {
                 <div class="time-group">
                     <div class="time-input">
                         <label>Apertura</label>
-                        <input type="time" name="${day.key}_open" value="${openTime || '09:00'}" ${isClosed ? 'disabled' : ''}>
+                        <input type="time" name="${day.key}_open" value="${openTime}" ${isClosed ? 'disabled' : ''}>
                     </div>
                     <div class="time-input">
                         <label>Cierre</label>
-                        <input type="time" name="${day.key}_close" value="${closeTime || '18:00'}" ${isClosed ? 'disabled' : ''}>
+                        <input type="time" name="${day.key}_close" value="${closeTime}" ${isClosed ? 'disabled' : ''}>
                     </div>
                 </div>
                 <div class="time-group split-times" id="${day.key}_split_times" ${!isSplit ? 'style="display: none;"' : ''}>
                     <div class="time-input">
                         <label>Cierre mediodía</label>
-                        <input type="time" name="${day.key}_lunch_close" value="${lunchCloseTime || '14:00'}" ${isClosed ? 'disabled' : ''}>
+                        <input type="time" name="${day.key}_lunch_close" value="${lunchCloseTime}" ${isClosed ? 'disabled' : ''}>
                     </div>
                     <div class="time-input">
                         <label>Apertura tarde</label>
-                        <input type="time" name="${day.key}_lunch_open" value="${lunchOpenTime || '16:00'}" ${isClosed ? 'disabled' : ''}>
+                        <input type="time" name="${day.key}_lunch_open" value="${lunchOpenTime}" ${isClosed ? 'disabled' : ''}>
                     </div>
                 </div>
             </div>
@@ -238,6 +241,10 @@ function showEditForm(res, client, services, faqs) {
     // Extraer horarios de trabajo
     const businessHours = client.business_hours || {};
     const slotConfig = client.slot_config || {};
+    
+    // Debug temporal: mostrar los datos de horarios
+    console.log('=== DEBUG BUSINESS HOURS ===');
+    console.log('Raw business_hours:', JSON.stringify(businessHours, null, 2));
     
     const html = `<!DOCTYPE html>
 <html lang="es">

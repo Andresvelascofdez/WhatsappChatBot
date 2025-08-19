@@ -17,10 +17,11 @@
     { "src": "/(.*)", "dest": "/api/chatbot.js" }
   ],
   "env": {
-    "SUPABASE_URL": "@supabase_url",
-    "SUPABASE_ANON_KEY": "@supabase_anon_key",
-    "TWILIO_ACCOUNT_SID": "@twilio_account_sid",
-    "TWILIO_AUTH_TOKEN": "@twilio_auth_token",
-    "WHATSAPP_NUMBER": "@whatsapp_number"
+    "SUPABASE_URL": "SUPABASE_URL",
+    "SUPABASE_ANON_KEY": "SUPABASE_ANON_KEY",
+    "TWILIO_ACCOUNT_SID": "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN": "TWILIO_AUTH_TOKEN",
+    "GOOGLE_CLIENT_ID": "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET": "GOOGLE_CLIENT_SECRET"
   }
 }

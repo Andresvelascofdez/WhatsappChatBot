@@ -1690,6 +1690,138 @@ async function cancelCalendarEvent(tenantId, eventId) {
   }
 }
 
+// ==================== SLOT GENERATION ====================
+
+// Función para generar slots disponibles para un servicio en una fecha específica
+async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
+  try {
+    const service = tenantConfig.services.find(s => s.id === serviceId);
+    if (!service) {
+      console.log(`Service not found. ServiceId: ${serviceId}, Available services:`, tenantConfig.services.map(s => ({id: s.id, name: s.name})));
+      throw new Error('Service not found');
+    }
+    
+    // Crear fecha usando formato YYYY-MM-DD para evitar problemas de zona horaria
+    let requestedDateObj;
+    if (requestedDate.includes('-')) {
+      // Formato YYYY-MM-DD
+      const [year, month, day] = requestedDate.split('-');
+      requestedDateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    } else {
+      // Fallback para ISO string
+      requestedDateObj = new Date(requestedDate);
+    }
+    
+    console.log(`📅 Processing date: ${requestedDate} -> ${requestedDateObj.toDateString()}`);
+    
+    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][requestedDateObj.getDay()];
+    
+    // Obtener configuración de slots del tenant
+    const slotConfig = tenantConfig.slot_config || {
+      slot_granularity: 15,
+      allow_same_day_booking: true,
+      max_advance_booking_days: 30
+    };
+    
+    // Buscar horarios de negocio - primero en slot_config, luego en business_hours, finalmente por defecto
+    const businessHours = slotConfig.business_hours?.[dayOfWeek] || 
+                         tenantConfig.business_hours?.[dayOfWeek] || 
+                         { open: '09:00', close: '18:00', closed: false };
+                         
+    if (businessHours.closed === true) {
+      return { success: false, error: 'Negocio cerrado este día' };
+    }
+    
+    // Manejar jornada partida vs jornada continua
+    let timeSlots = [];
+    
+    if (businessHours.morning && businessHours.afternoon) {
+      // Jornada partida
+      timeSlots.push({
+        open: businessHours.morning.open || '09:00',
+        close: businessHours.morning.close || '14:00'
+      });
+      timeSlots.push({
+        open: businessHours.afternoon.open || '16:00',
+        close: businessHours.afternoon.close || '18:00'
+      });
+    } else {
+      // Jornada continua
+      timeSlots.push({
+        open: businessHours.open || '09:00',
+        close: businessHours.close || '18:00'
+      });
+    }
+    
+    // Usar duración del servicio directamente (custom_slot_duration o duration_min)
+    const serviceDuration = service.custom_slot_duration || service.duration_min || service.duration_minutes || 30;
+    const slotGranularity = slotConfig.slot_granularity || 15;
+    
+    const slots = [];
+    
+    // Generar slots para cada período de tiempo
+    for (const timeSlot of timeSlots) {
+      const startHour = parseInt(timeSlot.open.split(':')[0]);
+      const startMinute = parseInt(timeSlot.open.split(':')[1]);
+      const endHour = parseInt(timeSlot.close.split(':')[0]);
+      const endMinute = parseInt(timeSlot.close.split(':')[1]);
+      
+      let currentTime = new Date(requestedDateObj);
+      currentTime.setHours(startHour, startMinute, 0, 0);
+      
+      const endTime = new Date(requestedDateObj);
+      endTime.setHours(endHour, endMinute, 0, 0);
+      
+      while (currentTime < endTime) {
+        // El slot es exactamente la duración del servicio
+        const slotEnd = new Date(currentTime.getTime() + serviceDuration * 60000);
+        
+        // Verificar que el servicio termine antes del cierre de este período
+        if (slotEnd <= endTime) {
+          // Verificar disponibilidad en calendario para la duración exacta del servicio
+          const isAvailable = await checkCalendarAvailability(
+            tenantConfig.id,
+            currentTime.toISOString(),
+            slotEnd.toISOString()
+          );
+          
+          if (isAvailable) {
+            // Crear fechas para mostrar en zona horaria España
+            const madridTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "Europe/Madrid"}));
+            const displayTime = madridTime.toLocaleTimeString('es-ES', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'Europe/Madrid'
+            });
+            
+            slots.push({
+              startTime: currentTime.toISOString(),
+              endTime: slotEnd.toISOString(),
+              displayTime: displayTime,
+              serviceDuration
+            });
+          }
+        }
+        
+        // Avanzar según la granularidad configurada
+        currentTime = new Date(currentTime.getTime() + slotGranularity * 60000);
+      }
+    }
+    
+    return {
+      success: true,
+      slots: slots, // Mostrar todos los slots disponibles
+      slotConfig: {
+        granularity: slotGranularity,
+        serviceDuration
+      }
+    };
+  } catch (error) {
+    console.error('Error generating available slots:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // ==================== APPOINTMENT MANAGEMENT ====================
 
 // Función para crear hold temporal de slot

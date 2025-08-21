@@ -272,6 +272,12 @@ async function processTwilioMessage(data) {
       return;
     }
     
+    // Verificar si el cliente está activo
+    if (tenantConfig.active === false) {
+      console.log(`⚠️ Cliente ${tenantConfig.name} (${tenantConfig.id}) está inactivo - ignorando mensaje`);
+      return;
+    }
+    
     // Generar respuesta personalizada según el tenant
     const response = await generateResponse(
       Body.toLowerCase().trim(), 
@@ -352,6 +358,12 @@ async function processIncomingMessage(message, contacts) {
     
     if (!tenantConfig) {
       console.error(`No se encontró tenant para el número: ${businessPhoneNumber}`);
+      return;
+    }
+    
+    // Verificar si el cliente está activo
+    if (tenantConfig.active === false) {
+      console.log(`⚠️ Cliente ${tenantConfig.name} (${tenantConfig.id}) está inactivo - ignorando mensaje`);
       return;
     }
     
@@ -828,9 +840,9 @@ Intenta con una fecha futura: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`
     // Crear fecha/hora de fin
     const endDateTime = new Date(requestedDateTime.getTime() + (service.duration_minutes || 30) * 60000);
     
-    // Convertir a ISO con zona horaria local (España)
-    const startTimeISO = new Date(requestedDateTime.getTime() - (requestedDateTime.getTimezoneOffset() * 60000)).toISOString();
-    const endTimeISO = new Date(endDateTime.getTime() - (endDateTime.getTimezoneOffset() * 60000)).toISOString();
+    // Usar las fechas directamente en ISO sin manipular timezone
+    const startTimeISO = requestedDateTime.toISOString();
+    const endTimeISO = endDateTime.toISOString();
     
     // Generar slots disponibles para ese día
     const slotsResult = await generateAvailableSlots(tenantConfig, service.id, `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
@@ -994,7 +1006,6 @@ Intenta de nuevo o contacta directamente.`;
 💰 Precio: €${appointment.services.price}
 
 📧 *Se ha creado un evento en el calendario*
-🔗 ${confirmResult.eventLink || 'Revisa tu calendario'}
 
 📞 Para cancelar o reprogramar, contacta directamente.
 ID de cita: ${confirmResult.appointmentId}`;
@@ -1618,6 +1629,11 @@ async function confirmAppointment(appointmentId, customerData) {
     
     const appointment = appointments[0];
     
+    // Normalizar precio del servicio
+    if (appointment.services && appointment.services.price_cents && !appointment.services.price) {
+      appointment.services.price = appointment.services.price_cents / 100;
+    }
+    
     // Verificar que el hold no haya expirado
     if (new Date() > new Date(appointment.hold_expires_at)) {
       throw new Error('Hold has expired');
@@ -1663,13 +1679,14 @@ async function confirmAppointment(appointmentId, customerData) {
       }
     }
     
-    // Crear evento en Google Calendar con zona horaria España
+    // Crear evento en Google Calendar con zona horaria del tenant
+    const tenantTimezone = tenantConfig?.tz || 'Europe/Madrid';
     const eventDetails = {
       summary: `${appointment.services.name} - ${customerData.name}`,
       description: `Servicio: ${appointment.services.name}\nCliente: ${customerData.name}\nTeléfono: ${customerData.phone}`,
       startDateTime: appointment.start_time,
       endDateTime: appointment.end_time,
-      timeZone: 'Europe/Madrid'
+      timeZone: tenantTimezone
     };
     
     const calendarResult = await createCalendarEvent(appointment.tenant_id, eventDetails);
@@ -1748,62 +1765,84 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
                          tenantConfig.business_hours?.[dayOfWeek] || 
                          { open: '09:00', close: '18:00', closed: false };
                          
-    if (businessHours.closed) {
-      return { success: false, error: 'Business closed on this day' };
+    if (businessHours.closed === true) {
+      return { success: false, error: 'Negocio cerrado este día' };
     }
     
-    const openTime = businessHours.open || '09:00';
-    const closeTime = businessHours.close || '18:00';
+    // Manejar jornada partida vs jornada continua
+    let timeSlots = [];
+    
+    if (businessHours.morning && businessHours.afternoon) {
+      // Jornada partida
+      timeSlots.push({
+        open: businessHours.morning.open || '09:00',
+        close: businessHours.morning.close || '14:00'
+      });
+      timeSlots.push({
+        open: businessHours.afternoon.open || '16:00',
+        close: businessHours.afternoon.close || '18:00'
+      });
+    } else {
+      // Jornada continua
+      timeSlots.push({
+        open: businessHours.open || '09:00',
+        close: businessHours.close || '18:00'
+      });
+    }
     
     // Usar duración del servicio directamente (custom_slot_duration o duration_min)
     const serviceDuration = service.custom_slot_duration || service.duration_min || service.duration_minutes || 30;
     const slotGranularity = slotConfig.slot_granularity || 15;
     
     const slots = [];
-    const startHour = parseInt(openTime.split(':')[0]);
-    const startMinute = parseInt(openTime.split(':')[1]);
-    const endHour = parseInt(closeTime.split(':')[0]);
-    const endMinute = parseInt(closeTime.split(':')[1]);
     
-    let currentTime = new Date(requestedDateObj);
-    currentTime.setHours(startHour, startMinute, 0, 0);
-    
-    const endTime = new Date(requestedDateObj);
-    endTime.setHours(endHour, endMinute, 0, 0);
-    
-    while (currentTime < endTime) {
-      // El slot es exactamente la duración del servicio
-      const slotEnd = new Date(currentTime.getTime() + serviceDuration * 60000);
+    // Generar slots para cada período de tiempo
+    for (const timeSlot of timeSlots) {
+      const startHour = parseInt(timeSlot.open.split(':')[0]);
+      const startMinute = parseInt(timeSlot.open.split(':')[1]);
+      const endHour = parseInt(timeSlot.close.split(':')[0]);
+      const endMinute = parseInt(timeSlot.close.split(':')[1]);
       
-      // Verificar que el servicio termine antes del cierre
-      if (slotEnd <= endTime) {
-        // Verificar disponibilidad en calendario para la duración exacta del servicio
-        const isAvailable = await checkCalendarAvailability(
-          tenantConfig.id,
-          currentTime.toISOString(),
-          slotEnd.toISOString()
-        );
+      let currentTime = new Date(requestedDateObj);
+      currentTime.setHours(startHour, startMinute, 0, 0);
+      
+      const endTime = new Date(requestedDateObj);
+      endTime.setHours(endHour, endMinute, 0, 0);
+      
+      while (currentTime < endTime) {
+        // El slot es exactamente la duración del servicio
+        const slotEnd = new Date(currentTime.getTime() + serviceDuration * 60000);
         
-        if (isAvailable) {
-          // Crear fechas para mostrar en zona horaria España
-          const madridTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "Europe/Madrid"}));
-          const displayTime = madridTime.toLocaleTimeString('es-ES', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            timeZone: 'Europe/Madrid'
-          });
+        // Verificar que el servicio termine antes del cierre de este período
+        if (slotEnd <= endTime) {
+          // Verificar disponibilidad en calendario para la duración exacta del servicio
+          const isAvailable = await checkCalendarAvailability(
+            tenantConfig.id,
+            currentTime.toISOString(),
+            slotEnd.toISOString()
+          );
           
-          slots.push({
-            startTime: currentTime.toISOString(),
-            endTime: slotEnd.toISOString(),
-            displayTime: displayTime,
-            serviceDuration
-          });
+          if (isAvailable) {
+            // Crear fechas para mostrar en zona horaria España
+            const madridTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "Europe/Madrid"}));
+            const displayTime = madridTime.toLocaleTimeString('es-ES', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'Europe/Madrid'
+            });
+            
+            slots.push({
+              startTime: currentTime.toISOString(),
+              endTime: slotEnd.toISOString(),
+              displayTime: displayTime,
+              serviceDuration
+            });
+          }
         }
+        
+        // Avanzar según la granularidad configurada
+        currentTime = new Date(currentTime.getTime() + slotGranularity * 60000);
       }
-      
-      // Avanzar según la granularidad configurada
-      currentTime = new Date(currentTime.getTime() + slotGranularity * 60000);
     }
     
     return {

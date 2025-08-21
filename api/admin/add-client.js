@@ -1604,17 +1604,48 @@ async function sendAuthorizationEmail(toEmail, businessName, authUrl) {
         `
     };
 
-    // Usando EmailJS (servicio gratuito) o webhook personalizado
-    // Por ahora, simular el envío y registrar en logs
-    console.log('📧 EMAIL PREPARADO PARA ENVÍO:');
-    console.log(`   Para: ${emailData.to}`);
-    console.log(`   Asunto: ${emailData.subject}`);
-    console.log(`   Enlace: ${authUrl}`);
-    
-    // TODO: Implementar envío real con servicio de email
-    // Opciones: EmailJS, SendGrid, Resend, etc.
-    
-    return true;
+    // Enviar email real si está configurado
+    try {
+        const resendApiKey = process.env.RESEND_API_KEY;
+        
+        if (resendApiKey) {
+            console.log('📧 Enviando email vía Resend...');
+            
+            const response = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${resendApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    from: 'WhatsApp Bot <noreply@resend.dev>',
+                    to: emailData.to,
+                    subject: emailData.subject,
+                    html: emailData.html
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Email enviado exitosamente:', result.id);
+                return true;
+            } else {
+                const error = await response.text();
+                console.error('❌ Error enviando email:', error);
+                throw new Error(`Error enviando email: ${response.status}`);
+            }
+        } else {
+            console.log('⚠️ RESEND_API_KEY no configurada, simulando envío de email');
+            console.log('📧 EMAIL PREPARADO PARA ENVÍO:');
+            console.log(`   Para: ${emailData.to}`);
+            console.log(`   Asunto: ${emailData.subject}`);
+            console.log(`   Enlace: ${authUrl}`);
+            return true;
+        }
+    } catch (error) {
+        console.error('❌ Error en sendAuthorizationEmail:', error);
+        throw error;
+    }
 }
 
 function showSuccessPage(res, data) {

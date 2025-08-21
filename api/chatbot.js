@@ -599,8 +599,8 @@ ${relevantFAQ.answer}
     
     // Hacer reserva - Detectar diferentes formatos
     if (messageText.includes('reservar') || messageText.includes('cita') || messageText.includes('reserva')) {
-      // Intentar parsear comando completo: "reservar [servicio] [fecha] [hora]"
-      const reserveMatch = messageText.match(/reservar\s+(.+?)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})/);
+      // Intentar parsear comando completo: "reservar [servicio] DD/MM HH:MM" (sin año)
+      const reserveMatch = messageText.match(/reservar\s+(.+?)\s+(\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{2})/);
       
       if (reserveMatch) {
         const [, serviceName, dateStr, timeStr] = reserveMatch;
@@ -618,8 +618,8 @@ ${relevantFAQ.answer}
 Para realizar tu reserva, puedes:
 
 🔢 *Opción 1: Comando completo*
-Escribe: *reservar [servicio] [fecha] [hora]*
-Ejemplo: reservar corte 25/08/2025 10:00
+Escribe: *reservar [servicio] DD/MM HH:MM*
+Ejemplo: reservar corte 25/08 10:00
 
 🔢 *Opción 2: Paso a paso*
 Responde con el número del servicio:
@@ -627,7 +627,7 @@ Responde con el número del servicio:
 ${servicesText}
 Ejemplo: escribe *1* para Corte de pelo
 
-💡 *Tip*: Usa el formato DD/MM/YYYY para fechas`;
+💡 *Tip*: Usa el formato DD/MM para fechas (sin año)`;
     }
     
     // Procesar selección de servicio por número
@@ -641,29 +641,32 @@ Ejemplo: escribe *1* para Corte de pelo
 ⏱️ Duración: ${selectedService.duration_minutes || 30} minutos
 
 📅 *Ahora elige la fecha*
-Escribe la fecha en formato DD/MM/YYYY
-Ejemplo: 25/08/2025
+Escribe la fecha en formato DD/MM
+Ejemplo: 25/08
 
 💡 Horarios disponibles: ${getBusinessHoursText(tenantConfig.business_hours)}`;
       }
     }
     
-    // Procesar fecha (formato DD/MM/YYYY)
-    const dateMatch = messageText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    // Procesar fecha (formato DD/MM sin año)
+    const dateMatch = messageText.match(/(\d{1,2})\/(\d{1,2})$/);
     if (dateMatch) {
-      const [, day, month, year] = dateMatch;
-      const requestedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      const [, day, month] = dateMatch;
+      const targetYear = determineTargetYear(parseInt(month));
+      const requestedDate = `${targetYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
       
       // Aquí necesitaríamos mantener estado de la conversación
       // Por simplicidad, vamos a pedir que usen el comando completo
-      return `📅 *Fecha recibida: ${day}/${month}/${year}*
+      return `📅 *Fecha recibida: ${day}/${month}/${targetYear}*
 
 Para continuar, usa el comando completo:
-*reservar [servicio] ${day}/${month}/${year} [hora]*
+*reservar [servicio] ${day}/${month} [hora]*
 
-Ejemplo: reservar corte ${day}/${month}/${year} 10:00
+Ejemplo: reservar corte ${day}/${month} 10:00
 
-⏰ Horarios disponibles: ${getBusinessHoursText(tenantConfig.business_hours)}`;
+⏰ Horarios disponibles: ${getBusinessHoursText(tenantConfig.business_hours)}
+
+💡 Para ver slots disponibles: *huecos dia ${day}/${month}*`;
     }
     
     // Confirmar cita
@@ -707,12 +710,20 @@ ${hoursText}
 Para verificar disponibilidad en una fecha específica, escribe *reservar*.`;
     }
     
+    // Consultar huecos disponibles para un día
+    const huecosMatch = messageText.match(/huecos?\s+d[ií]a\s+(\d{1,2})\/(\d{1,2})/);
+    if (huecosMatch) {
+      const [, day, month] = huecosMatch;
+      return await processAvailableSlotsQuery(day, month, tenantConfig);
+    }
+
     // Ayuda
     if (messageText.includes('ayuda') || messageText.includes('help') || messageText.includes('opciones')) {
       let helpText = `❓ *Centro de Ayuda*
 
 📱 *Comandos disponibles:*
-• *reservar* - Hacer una cita
+• *reservar [servicio] DD/MM HH:MM* - Hacer una cita
+• *huecos dia DD/MM* - Ver slots disponibles
 • *servicios* - Ver servicios y precios
 • *horarios* - Ver horarios disponibles
 • *contacto* - Información de contacto
@@ -799,6 +810,103 @@ No estoy seguro de cómo ayudarte con eso. Aquí tienes las opciones disponibles
   }
 }
 
+// ==================== UTILITY FUNCTIONS ====================
+
+// Función para determinar el año correcto basado en el mes solicitado
+function determineTargetYear(requestedMonth) {
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1; // getMonth() es 0-based
+  const currentYear = now.getFullYear();
+  
+  // Si estamos en los últimos meses del año (Oct, Nov, Dic) 
+  // y se solicita un mes de principio de año (Ene, Feb, Mar, Abr)
+  // asumir que se refiere al año siguiente
+  if (currentMonth >= 10 && requestedMonth <= 4) {
+    return currentYear + 1;
+  }
+  
+  // Si estamos en los primeros meses del año (Ene, Feb, Mar)
+  // y se solicita un mes de final del año anterior (Oct, Nov, Dic)
+  // asumir que se refiere al año actual (no permitir citas en el pasado)
+  if (currentMonth <= 3 && requestedMonth >= 10) {
+    return currentYear;
+  }
+  
+  // En cualquier otro caso, usar el año actual
+  return currentYear;
+}
+
+// Función para procesar consulta de slots disponibles
+async function processAvailableSlotsQuery(day, month, tenantConfig) {
+  try {
+    const targetYear = determineTargetYear(parseInt(month));
+    const requestedDate = `${targetYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    
+    console.log(`🔍 Consultando huecos para ${day}/${month}/${targetYear}`);
+    
+    // Validar que la fecha no sea en el pasado
+    const requestedDateObj = new Date(requestedDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (requestedDateObj < today) {
+      return `❌ *Fecha en el pasado*
+
+No se pueden consultar huecos para ${day}/${month}/${targetYear}.
+Intenta con una fecha futura.`;
+    }
+    
+    // Obtener nombre del día de la semana en español
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const dayName = dayNames[requestedDateObj.getDay()];
+    
+    let response = `📅 *Huecos disponibles para ${dayName} ${day}/${month}/${targetYear}*\n\n`;
+    
+    // Verificar si hay servicios configurados
+    if (!tenantConfig.services || tenantConfig.services.length === 0) {
+      return response + `❌ No hay servicios configurados.`;
+    }
+    
+    let hasAvailableSlots = false;
+    
+    // Generar slots para cada servicio
+    for (const service of tenantConfig.services) {
+      const slotsResult = await generateAvailableSlots(tenantConfig, service.id, requestedDate);
+      
+      if (slotsResult.success && slotsResult.slots.length > 0) {
+        hasAvailableSlots = true;
+        response += `💇‍♀️ *${service.name}* (${service.duration_minutes || 30} min, €${service.price})\n`;
+        
+        // Agrupar slots por bloques de tiempo para mejor visualización
+        const slotsText = slotsResult.slots.map((slot, index) => {
+          return `   ${slot.displayTime}`;
+        }).join(', ');
+        
+        response += `   ${slotsText}\n\n`;
+      } else {
+        response += `💇‍♀️ *${service.name}*: Sin huecos disponibles\n\n`;
+      }
+    }
+    
+    if (!hasAvailableSlots) {
+      response += `❌ *No hay huecos disponibles para esta fecha*\n\n`;
+      response += `💡 Intenta con otra fecha o consulta nuestros horarios: *horarios*`;
+    } else {
+      response += `✅ *Para reservar un hueco:*\n`;
+      response += `Escribe: *reservar [servicio] ${day}/${month} [hora]*\n`;
+      response += `Ejemplo: *reservar corte ${day}/${month} ${tenantConfig.services[0] ? '10:00' : ''}*`;
+    }
+    
+    return response;
+    
+  } catch (error) {
+    console.error('Error processing available slots query:', error);
+    return `❌ *Error consultando huecos*
+
+Intenta de nuevo en unos momentos.`;
+  }
+}
+
 // ==================== RESERVATION FLOW HANDLERS ====================
 
 // Función para procesar comando completo de reserva
@@ -819,8 +927,24 @@ ${availableServices}
 Intenta de nuevo: *reservar [servicio] ${dateStr} ${timeStr}*`;
     }
     
-    // Validar fecha
-    const [day, month, year] = dateStr.split('/');
+    // Validar fecha (ahora puede ser DD/MM o DD/MM/YYYY)
+    let day, month, year;
+    const dateParts = dateStr.split('/');
+    
+    if (dateParts.length === 2) {
+      // Formato DD/MM - determinar año automáticamente
+      [day, month] = dateParts;
+      year = determineTargetYear(parseInt(month)).toString();
+    } else if (dateParts.length === 3) {
+      // Formato DD/MM/YYYY - usar año especificado
+      [day, month, year] = dateParts;
+    } else {
+      return `❌ *Formato de fecha inválido*
+
+Usa: DD/MM o DD/MM/YYYY
+Intenta de nuevo: *reservar ${serviceName} [DD/MM] ${timeStr}*`;
+    }
+    
     const requestedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -829,7 +953,7 @@ Intenta de nuevo: *reservar [servicio] ${dateStr} ${timeStr}*`;
       return `❌ *Fecha inválida*
 
 No puedes reservar en el pasado. 
-Intenta con una fecha futura: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
+Intenta con una fecha futura: *reservar ${serviceName} [DD/MM] ${timeStr}*`;
     }
     
     // Validar hora
@@ -885,14 +1009,14 @@ Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
 Intenta con otro día: *reservar ${serviceName} [DD/MM/YYYY] ${timeStr}*`;
       }
       
-      return `❌ *Horario ${timeStr} no disponible para ${dateStr}*
+      return `❌ *Horario ${timeStr} no disponible para ${day}/${month}/${year}*
 
 ⏰ *Horarios disponibles:*
 ${availableSlotsText}
 💡 *Slots cada ${slotsResult.slotConfig.granularity} min, servicio dura ${slotsResult.slotConfig.serviceDuration} min*
 
-Para reservar: *reservar ${serviceName} ${dateStr} [hora]*
-Ejemplo: *reservar ${serviceName} ${dateStr} ${slotsResult.slots[0]?.displayTime}*`;
+Para reservar: *reservar ${serviceName} ${day}/${month} [hora]*
+Ejemplo: *reservar ${serviceName} ${day}/${month} ${slotsResult.slots[0]?.displayTime}*`;
     }
     
     // Crear hold temporal usando exactamente la duración del servicio
@@ -920,7 +1044,7 @@ Intenta de nuevo en unos momentos.`;
 📋 *Detalles de tu reserva:*
 👤 Cliente: ${contactName}
 💇‍♀️ Servicio: ${service.name}
-📅 Fecha: ${dateStr}
+📅 Fecha: ${day}/${month}/${year}
 🕐 Hora: ${timeStr}
 ⏱️ Duración: ${service.duration_minutes || 30} min
 💰 Precio: €${service.price}
@@ -936,8 +1060,8 @@ ID de reserva: ${holdResult.appointmentId}`;
     console.error('Error processing reservation command:', error);
     return `❌ *Error procesando reserva*
 
-Intenta de nuevo: *reservar [servicio] [DD/MM/YYYY] [HH:MM]*
-Ejemplo: *reservar corte 25/08/2025 10:00*`;
+Intenta de nuevo: *reservar [servicio] [DD/MM] [HH:MM]*
+Ejemplo: *reservar corte 25/08 10:00*`;
   }
 }
 

@@ -1048,13 +1048,16 @@ No puedes reservar en el pasado.
 Intenta con una fecha futura: *reservar ${serviceName} [DD/MM] ${timeStr}*`;
     }
     
-    // Validar hora
+    // Validar hora - crear fecha en UTC para evitar problemas de zona horaria
     const [hour, minute] = timeStr.split(':');
-    const requestedDateTime = new Date(requestedDate);
-    requestedDateTime.setHours(parseInt(hour), parseInt(minute), 0, 0);
+    
+    // Crear fechas UTC directamente
+    const requestedDateTime = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), 0, 0));
     
     // Crear fecha/hora de fin
     const endDateTime = new Date(requestedDateTime.getTime() + (service.duration_minutes || 30) * 60000);
+    
+    console.log(`🔍 Requested time: ${timeStr} -> UTC: ${requestedDateTime.toISOString()}`);
     
     // Usar las fechas directamente en ISO sin manipular timezone
     const startTimeISO = requestedDateTime.toISOString();
@@ -1211,6 +1214,11 @@ Intenta de nuevo o contacta directamente.`;
       minute: '2-digit' 
     });
     
+    // Calcular precio correctamente
+    const servicePrice = appointment.services.price_cents ? 
+                        (appointment.services.price_cents / 100) : 
+                        (appointment.services.price || 0);
+    
     return `✅ *¡Cita confirmada!*
 
 📋 *Detalles confirmados:*
@@ -1218,8 +1226,8 @@ Intenta de nuevo o contacta directamente.`;
 💇‍♀️ Servicio: ${appointment.services.name}
 📅 Fecha: ${formattedDate}
 🕐 Hora: ${formattedTime}
-⏱️ Duración: ${appointment.services.duration_minutes || 30} min
-💰 Precio: €${appointment.services.price}
+⏱️ Duración: ${appointment.services.duration_minutes || appointment.services.duration_min || 30} min
+💰 Precio: €${servicePrice}
 
 📧 *Se ha creado un evento en el calendario*
 
@@ -1728,6 +1736,8 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
                          tenantConfig.business_hours?.[dayOfWeek] || 
                          { open: '09:00', close: '18:00', closed: false };
                          
+    console.log(`📅 Business hours for ${dayOfWeek}:`, businessHours);
+                         
     if (businessHours.closed === true) {
       return { success: false, error: 'Negocio cerrado este día' };
     }
@@ -1759,6 +1769,8 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
     
     const slots = [];
     
+    console.log(`🔧 Generating slots with serviceDuration: ${serviceDuration} min, granularity: ${slotGranularity} min`);
+    
     // Generar slots para cada período de tiempo
     for (const timeSlot of timeSlots) {
       const startHour = parseInt(timeSlot.open.split(':')[0]);
@@ -1766,11 +1778,11 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
       const endHour = parseInt(timeSlot.close.split(':')[0]);
       const endMinute = parseInt(timeSlot.close.split(':')[1]);
       
-      let currentTime = new Date(requestedDateObj);
-      currentTime.setHours(startHour, startMinute, 0, 0);
+      let currentTime = new Date(Date.UTC(requestedDateObj.getFullYear(), requestedDateObj.getMonth(), requestedDateObj.getDate(), startHour, startMinute, 0, 0));
       
-      const endTime = new Date(requestedDateObj);
-      endTime.setHours(endHour, endMinute, 0, 0);
+      const endTime = new Date(Date.UTC(requestedDateObj.getFullYear(), requestedDateObj.getMonth(), requestedDateObj.getDate(), endHour, endMinute, 0, 0));
+      
+      console.log(`⏰ Time slot: ${timeSlot.open} - ${timeSlot.close} (${startHour}:${startMinute} - ${endHour}:${endMinute})`);
       
       while (currentTime < endTime) {
         // El slot es exactamente la duración del servicio
@@ -1786,13 +1798,10 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
           );
           
           if (isAvailable) {
-            // Crear fechas para mostrar en zona horaria España
-            const madridTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "Europe/Madrid"}));
-            const displayTime = madridTime.toLocaleTimeString('es-ES', { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              timeZone: 'Europe/Madrid'
-            });
+            // Mostrar hora UTC correctamente (los slots se crean en UTC)
+            const utcHour = currentTime.getUTCHours();
+            const utcMinute = currentTime.getUTCMinutes();
+            const displayTime = `${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')}`;
             
             slots.push({
               startTime: currentTime.toISOString(),
@@ -1808,6 +1817,8 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
       }
     }
     
+    console.log(`✅ Generated ${slots.length} slots for ${requestedDate}`);
+    
     return {
       success: true,
       slots: slots, // Mostrar todos los slots disponibles
@@ -1816,6 +1827,7 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
         serviceDuration
       }
     };
+    
   } catch (error) {
     console.error('Error generating available slots:', error);
     return { success: false, error: error.message };

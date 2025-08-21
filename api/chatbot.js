@@ -186,6 +186,13 @@ module.exports = async (req, res) => {
         const serviceClientId = urlPath.split('/')[3];
         return await handleAdminCreateService(req, res, serviceClientId);
         
+      case urlPath === '/admin/stats' && method === 'GET':
+        return await handleAdminStats(req, res);
+        
+      case urlPath.startsWith('/admin/clients/') && urlPath.endsWith('/delete-all') && method === 'DELETE':
+        const deleteClientId = urlPath.split('/')[3];
+        return await handleAdminDeleteClient(req, res, deleteClientId);
+        
       default:
         return res.status(404).json({
           error: 'Not Found',
@@ -204,7 +211,9 @@ module.exports = async (req, res) => {
             'GET /admin/clients/:id',
             'PUT /admin/clients/:id/business-hours',
             'POST /admin/clients/:id/faqs',
-            'POST /admin/clients/:id/services'
+            'POST /admin/clients/:id/services',
+            'GET /admin/stats',
+            'DELETE /admin/clients/:id/delete-all'
           ],
           timestamp: new Date().toISOString()
         });
@@ -1803,8 +1812,25 @@ async function confirmAppointment(appointmentId, customerData) {
       }
     }
     
+    // Obtener información del tenant para la zona horaria
+    const tenantResponse = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${appointment.tenant_id}&select=tz`, {
+      method: 'GET',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    let tenantTimezone = 'Europe/Madrid'; // Default timezone
+    if (tenantResponse.ok) {
+      const tenants = await tenantResponse.json();
+      if (tenants.length > 0 && tenants[0].tz) {
+        tenantTimezone = tenants[0].tz;
+      }
+    }
+    
     // Crear evento en Google Calendar con zona horaria del tenant
-    const tenantTimezone = tenantConfig?.tz || 'Europe/Madrid';
     const eventDetails = {
       summary: `${appointment.services.name} - ${customerData.name}`,
       description: `Servicio: ${appointment.services.name}\nCliente: ${customerData.name}\nTeléfono: ${customerData.phone}`,
@@ -1853,842 +1879,120 @@ async function confirmAppointment(appointmentId, customerData) {
   }
 }
 
-// Función para generar slots disponibles
-async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
+// Función para borrar completamente un cliente y todos sus datos
+async function handleAdminDeleteClient(req, res, clientId) {
   try {
-    const service = tenantConfig.services.find(s => s.id === serviceId);
-    if (!service) {
-      console.log(`Service not found. ServiceId: ${serviceId}, Available services:`, tenantConfig.services.map(s => ({id: s.id, name: s.name})));
-      throw new Error('Service not found');
-    }
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
     
-    // Crear fecha usando formato YYYY-MM-DD para evitar problemas de zona horaria
-    let requestedDateObj;
-    if (requestedDate.includes('-')) {
-      // Formato YYYY-MM-DD
-      const [year, month, day] = requestedDate.split('-');
-      requestedDateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    } else {
-      // Fallback para ISO string
-      requestedDateObj = new Date(requestedDate);
-    }
-    
-    console.log(`📅 Processing date: ${requestedDate} -> ${requestedDateObj.toDateString()}`);
-    
-    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][requestedDateObj.getDay()];
-    
-    // Obtener configuración de slots del tenant
-    const slotConfig = tenantConfig.slot_config || {
-      slot_granularity: 15,
-      allow_same_day_booking: true,
-      max_advance_booking_days: 30
-    };
-    
-    // Buscar horarios de negocio - primero en slot_config, luego en business_hours, finalmente por defecto
-    const businessHours = slotConfig.business_hours?.[dayOfWeek] || 
-                         tenantConfig.business_hours?.[dayOfWeek] || 
-                         { open: '09:00', close: '18:00', closed: false };
-                         
-    if (businessHours.closed === true) {
-      return { success: false, error: 'Negocio cerrado este día' };
-    }
-    
-    // Manejar jornada partida vs jornada continua
-    let timeSlots = [];
-    
-    if (businessHours.morning && businessHours.afternoon) {
-      // Jornada partida
-      timeSlots.push({
-        open: businessHours.morning.open || '09:00',
-        close: businessHours.morning.close || '14:00'
-      });
-      timeSlots.push({
-        open: businessHours.afternoon.open || '16:00',
-        close: businessHours.afternoon.close || '18:00'
-      });
-    } else {
-      // Jornada continua
-      timeSlots.push({
-        open: businessHours.open || '09:00',
-        close: businessHours.close || '18:00'
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({
+        error: 'Database not configured',
+        message: 'Supabase credentials missing'
       });
     }
     
-    // Usar duración del servicio directamente (custom_slot_duration o duration_min)
-    const serviceDuration = service.custom_slot_duration || service.duration_min || service.duration_minutes || 30;
-    const slotGranularity = slotConfig.slot_granularity || 15;
+    console.log(`🗑️ Iniciando borrado completo del cliente: ${clientId}`);
     
-    const slots = [];
-    
-    // Generar slots para cada período de tiempo
-    for (const timeSlot of timeSlots) {
-      const startHour = parseInt(timeSlot.open.split(':')[0]);
-      const startMinute = parseInt(timeSlot.open.split(':')[1]);
-      const endHour = parseInt(timeSlot.close.split(':')[0]);
-      const endMinute = parseInt(timeSlot.close.split(':')[1]);
-      
-      let currentTime = new Date(requestedDateObj);
-      currentTime.setHours(startHour, startMinute, 0, 0);
-      
-      const endTime = new Date(requestedDateObj);
-      endTime.setHours(endHour, endMinute, 0, 0);
-      
-      while (currentTime < endTime) {
-        // El slot es exactamente la duración del servicio
-        const slotEnd = new Date(currentTime.getTime() + serviceDuration * 60000);
-        
-        // Verificar que el servicio termine antes del cierre de este período
-        if (slotEnd <= endTime) {
-          // Verificar disponibilidad en calendario para la duración exacta del servicio
-          const isAvailable = await checkCalendarAvailability(
-            tenantConfig.id,
-            currentTime.toISOString(),
-            slotEnd.toISOString()
-          );
-          
-          if (isAvailable) {
-            // Crear fechas para mostrar en zona horaria España
-            const madridTime = new Date(currentTime.toLocaleString("en-US", {timeZone: "Europe/Madrid"}));
-            const displayTime = madridTime.toLocaleTimeString('es-ES', { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              timeZone: 'Europe/Madrid'
-            });
-            
-            slots.push({
-              startTime: currentTime.toISOString(),
-              endTime: slotEnd.toISOString(),
-              displayTime: displayTime,
-              serviceDuration
-            });
-          }
-        }
-        
-        // Avanzar según la granularidad configurada
-        currentTime = new Date(currentTime.getTime() + slotGranularity * 60000);
+    // 1. Borrar todas las citas del cliente
+    const deleteAppointmentsResponse = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
       }
+    });
+    
+    if (!deleteAppointmentsResponse.ok) {
+      console.error('Error deleting appointments:', await deleteAppointmentsResponse.text());
+    } else {
+      console.log('✅ Citas eliminadas');
     }
     
-    return {
+    // 2. Borrar todos los customers del cliente
+    const deleteCustomersResponse = await fetch(`${supabaseUrl}/rest/v1/customers?tenant_id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!deleteCustomersResponse.ok) {
+      console.error('Error deleting customers:', await deleteCustomersResponse.text());
+    } else {
+      console.log('✅ Customers eliminados');
+    }
+    
+    // 3. Borrar todos los servicios del cliente
+    const deleteServicesResponse = await fetch(`${supabaseUrl}/rest/v1/services?tenant_id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!deleteServicesResponse.ok) {
+      console.error('Error deleting services:', await deleteServicesResponse.text());
+    } else {
+      console.log('✅ Servicios eliminados');
+    }
+    
+    // 4. Borrar todas las FAQs del cliente
+    const deleteFaqsResponse = await fetch(`${supabaseUrl}/rest/v1/faqs?tenant_id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!deleteFaqsResponse.ok) {
+      console.error('Error deleting FAQs:', await deleteFaqsResponse.text());
+    } else {
+      console.log('✅ FAQs eliminadas');
+    }
+    
+    // 5. Finalmente, borrar el tenant
+    const deleteTenantResponse = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!deleteTenantResponse.ok) {
+      throw new Error('Error deleting tenant: ' + await deleteTenantResponse.text());
+    }
+    
+    console.log('✅ Cliente eliminado completamente');
+    
+    return res.status(200).json({
       success: true,
-      slots: slots, // Mostrar todos los slots disponibles
-      slotConfig: {
-        granularity: slotGranularity,
-        serviceDuration
-      }
-    };
-  } catch (error) {
-    console.error('Error generating available slots:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Función para enviar mensaje de WhatsApp
-async function sendWhatsAppMessage(to, message, tenantConfig = null) {
-  try {
-    // Limpiar variables de entorno eliminando caracteres de salto de línea
-    const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-    const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-    
-    // Usar número del tenant si está disponible, sino usar fallback hardcoded
-    let fromPhoneNumber;
-    if (tenantConfig?.phone_number) {
-      fromPhoneNumber = `whatsapp:+${tenantConfig.phone_number}`;
-    } else {
-      fromPhoneNumber = 'whatsapp:+14155238886'; // Fallback para desarrollo/testing
-    }
-    
-    console.log('Twilio credentials check:', {
-      accountSid: accountSid ? `${accountSid.substring(0, 8)}...` : 'MISSING',
-      authToken: authToken ? `${authToken.substring(0, 8)}...` : 'MISSING',
-      fromNumber: fromPhoneNumber,
-      tenant: tenantConfig?.business_name || 'Default'
-    });
-    
-    if (!accountSid || !authToken) {
-      console.error('Twilio credentials not configured');
-      return { success: false, error: 'Twilio credentials missing' };
-    }
-    
-    // Construir URL de la API de Twilio
-    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-    
-    // Asegurar formato correcto para From y To
-    const fromNumber = fromPhoneNumber.startsWith('whatsapp:') ? fromPhoneNumber : `whatsapp:${fromPhoneNumber}`;
-    const toNumber = to.startsWith('whatsapp:') ? to : `whatsapp:+${to}`;
-    
-    // Preparar datos del mensaje
-    const body = new URLSearchParams({
-      From: fromNumber,
-      To: toNumber,
-      Body: message
-    });
-    
-    // Crear header de autenticación
-    const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-    
-    console.log(`Sending message from ${fromNumber} to ${toNumber} via Twilio`);
-    
-    // Enviar mensaje usando fetch
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+      message: 'Cliente y todos sus datos eliminados correctamente',
+      deleted: {
+        tenant: true,
+        appointments: true,
+        customers: true,
+        services: true,
+        faqs: true
       },
-      body: body.toString()
+      timestamp: new Date().toISOString()
     });
-    
-    const result = await response.json();
-    
-    if (response.ok) {
-      console.log('Message sent successfully:', result.sid);
-      return {
-        success: true,
-        message_id: result.sid,
-        to,
-        status: result.status
-      };
-    } else {
-      console.error('Twilio API error:', result);
-      return { 
-        success: false, 
-        error: result.message || 'Failed to send message',
-        code: result.code
-      };
-    }
     
   } catch (error) {
-    console.error('Error sending WhatsApp message:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-// ==================== ADMIN PORTAL HANDLERS ====================
-
-// GET /admin/clients - Listar todos los tenants
-async function handleAdminGetClients(req, res) {
-  try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Supabase credentials not configured' });
-    }
-
-    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?select=*,services(*),faqs(*)&order=created_at.desc`, {
-      method: 'GET',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
+    console.error('Error deleting client completely:', error);
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message,
+      timestamp: new Date().toISOString()
     });
-
-    if (!response.ok) {
-      throw new Error(`Supabase error: ${response.status}`);
-    }
-
-    const tenants = await response.json();
-    
-    // Normalizar datos para el frontend
-    const normalizedTenants = tenants.map(tenant => ({
-      id: tenant.id,
-      name: tenant.name,
-      business_name: tenant.name, // Mapear para compatibilidad
-      email: tenant.email,
-      phone: tenant.phone,
-      address: tenant.address,
-      created_at: tenant.created_at,
-      updated_at: tenant.updated_at,
-      active: tenant.active,
-      settings: tenant.settings || {},
-      business_hours: tenant.business_hours || {
-        monday: { open: '09:00', close: '18:00' },
-        tuesday: { open: '09:00', close: '18:00' },
-        wednesday: { open: '09:00', close: '18:00' },
-        thursday: { open: '09:00', close: '18:00' },
-        friday: { open: '09:00', close: '18:00' },
-        saturday: { open: '09:00', close: '14:00' },
-        sunday: { closed: true }
-      },
-      slot_config: tenant.slot_config || {
-        slot_granularity: 15,
-        allow_same_day_booking: true,
-        max_advance_booking_days: 30
-      },
-      services: (tenant.services || []).map(service => ({
-        ...service,
-        price: service.price_cents ? (service.price_cents / 100) : 0,
-        duration_minutes: service.duration_min || 30
-      })),
-      faqs: tenant.faqs || [],
-      calendar_config: tenant.calendar_config
-    }));
-    
-    return res.status(200).json({ success: true, data: normalizedTenants });
-  } catch (error) {
-    console.error('Error fetching clients:', error);
-    return res.status(500).json({ error: 'Failed to fetch clients', message: error.message });
-  }
-}
-
-// POST /admin/clients - Crear nuevo tenant
-async function handleAdminCreateClient(req, res) {
-  try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Supabase credentials not configured' });
-    }
-
-    // Parse request body
-    let body = '';
-    if (req.body) {
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-    } else {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      body = Buffer.concat(chunks).toString();
-    }
-
-    const clientData = JSON.parse(body);
-    
-    // Validaciones básicas
-    if (!clientData.name || !clientData.phone) {
-      return res.status(400).json({ error: 'Name and phone are required' });
-    }
-
-    // Validar y estructurar dirección si se proporciona
-    let addressData = null;
-    if (clientData.address) {
-      if (typeof clientData.address === 'string') {
-        // Si es string, almacenar como dirección completa
-        addressData = { full_address: clientData.address };
-      } else if (typeof clientData.address === 'object') {
-        // Si es objeto, validar estructura
-        addressData = {
-          street: clientData.address.street || '',
-          city: clientData.address.city || '',
-          state: clientData.address.state || '',
-          postal_code: clientData.address.postal_code || '',
-          country: clientData.address.country || 'España',
-          full_address: clientData.address.full_address || 
-                       `${clientData.address.street || ''} ${clientData.address.city || ''} ${clientData.address.postal_code || ''}`.trim()
-        };
-      }
-    }
-
-    // Crear tenant en base de datos
-    const tenantResponse = await fetch(`${supabaseUrl}/rest/v1/tenants`, {
-      method: 'POST',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
-        name: clientData.name,
-        email: clientData.email,
-        phone: clientData.phone,
-        address: addressData ? (addressData.full_address || JSON.stringify(addressData)) : null,
-        business_hours: clientData.business_hours || {
-          monday: { open: '09:00', close: '18:00' },
-          tuesday: { open: '09:00', close: '18:00' },
-          wednesday: { open: '09:00', close: '18:00' },
-          thursday: { open: '09:00', close: '18:00' },
-          friday: { open: '09:00', close: '18:00' },
-          saturday: { open: '09:00', close: '14:00' },
-          sunday: { closed: true }
-        },
-        slot_config: clientData.slot_config || {
-          slot_granularity: 15,
-          allow_same_day_booking: true,
-          max_advance_booking_days: 30
-        },
-        settings: clientData.settings || {},
-        active: true,
-        tz: 'Europe/Madrid',
-        locale: 'es',
-        created_at: new Date().toISOString()
-      })
-    });
-
-    if (!tenantResponse.ok) {
-      const errorText = await tenantResponse.text();
-      throw new Error(`Failed to create tenant: ${errorText}`);
-    }
-
-    const tenant = await tenantResponse.json();
-    const createdTenant = tenant[0];
-    
-    // Si se proporcionaron FAQs iniciales, crearlas
-    if (clientData.faqs && Array.isArray(clientData.faqs) && clientData.faqs.length > 0) {
-      console.log('Creating initial FAQs for tenant:', createdTenant.id);
-      
-      for (const faq of clientData.faqs) {
-        if (faq.question && faq.answer) {
-          try {
-            await fetch(`${supabaseUrl}/rest/v1/faqs`, {
-              method: 'POST',
-              headers: {
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                tenant_id: createdTenant.id,
-                question: faq.question,
-                answer: faq.answer,
-                keywords: faq.keywords || [],
-                category: faq.category || 'general',
-                priority: faq.priority || 0,
-                is_active: faq.is_active !== false,
-                created_at: new Date().toISOString()
-              })
-            });
-          } catch (faqError) {
-            console.error('Error creating FAQ:', faqError);
-          }
-        }
-      }
-    }
-    
-    // Si se proporcionaron servicios iniciales, crearlos
-    if (clientData.services && Array.isArray(clientData.services) && clientData.services.length > 0) {
-      console.log('Creating initial services for tenant:', createdTenant.id);
-      
-      for (const service of clientData.services) {
-        if (service.name) {
-          try {
-            await fetch(`${supabaseUrl}/rest/v1/services`, {
-              method: 'POST',
-              headers: {
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                tenant_id: createdTenant.id,
-                name: service.name,
-                description: service.description || `Servicio de ${service.name}`,
-                price_cents: service.price ? Math.round(service.price * 100) : 0,
-                duration_min: service.duration_minutes || service.duration || 30,
-                buffer_min: service.buffer_min || 0,
-                custom_slot_duration: service.custom_slot_duration || null,
-                slot_granularity_min: service.slot_granularity_min || 15,
-                is_active: service.is_active !== false,
-                settings: service.settings || {},
-                created_at: new Date().toISOString()
-              })
-            });
-          } catch (serviceError) {
-            console.error('Error creating service:', serviceError);
-          }
-        }
-      }
-    }
-    
-    return res.status(201).json({ success: true, data: createdTenant });
-  } catch (error) {
-    console.error('Error creating client:', error);
-    return res.status(500).json({ error: 'Failed to create client', message: error.message });
-  }
-}
-
-// PUT /admin/clients/:id - Actualizar tenant existente
-async function handleAdminUpdateClient(req, res, clientId) {
-  try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Supabase credentials not configured' });
-    }
-
-    // Parse request body
-    let body = '';
-    if (req.body) {
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-    } else {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      body = Buffer.concat(chunks).toString();
-    }
-
-    const updateData = JSON.parse(body);
-    
-    // Procesar dirección si se proporciona
-    if (updateData.address) {
-      if (typeof updateData.address === 'string') {
-        updateData.address = { full_address: updateData.address };
-      } else if (typeof updateData.address === 'object' && updateData.address.street) {
-        // Asegurar que full_address esté completa
-        updateData.address.full_address = updateData.address.full_address || 
-                                         `${updateData.address.street || ''} ${updateData.address.city || ''} ${updateData.address.postal_code || ''}`.trim();
-      }
-    }
-    
-    // Asegurar que business_hours tenga la estructura correcta
-    if (updateData.business_hours) {
-      const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-      for (const day of validDays) {
-        if (updateData.business_hours[day]) {
-          const dayData = updateData.business_hours[day];
-          if (!dayData.closed && (!dayData.open || !dayData.close)) {
-            // Si no está marcado como cerrado pero no tiene horarios, usar defaults
-            updateData.business_hours[day] = { open: '09:00', close: '18:00' };
-          }
-        }
-      }
-    }
-    
-    // Actualizar tenant en base de datos
-    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
-      method: 'PATCH',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
-        ...updateData,
-        updated_at: new Date().toISOString()
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to update tenant: ${errorText}`);
-    }
-
-    const tenant = await response.json();
-    return res.status(200).json({ success: true, data: tenant[0] });
-  } catch (error) {
-    console.error('Error updating client:', error);
-    return res.status(500).json({ error: 'Failed to update client', message: error.message });
-  }
-}
-
-// GET /admin/clients/:id - Obtener tenant específico
-async function handleAdminGetClient(req, res, clientId) {
-  try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Supabase credentials not configured' });
-    }
-
-    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}&select=*,services(*),faqs(*)`, {
-      method: 'GET',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Supabase error: ${response.status}`);
-    }
-
-    const tenants = await response.json();
-    if (tenants.length === 0) {
-      return res.status(404).json({ error: 'Client not found' });
-    }
-
-    const tenant = tenants[0];
-    
-    // Normalizar datos para el frontend
-    const normalizedTenant = {
-      id: tenant.id,
-      name: tenant.name,
-      business_name: tenant.name, // Mapear para compatibilidad
-      email: tenant.email,
-      phone: tenant.phone,
-      address: tenant.address,
-      created_at: tenant.created_at,
-      updated_at: tenant.updated_at,
-      active: tenant.active,
-      settings: tenant.settings || {},
-      business_hours: tenant.business_hours || {
-        monday: { open: '09:00', close: '18:00' },
-        tuesday: { open: '09:00', close: '18:00' },
-        wednesday: { open: '09:00', close: '18:00' },
-        thursday: { open: '09:00', close: '18:00' },
-        friday: { open: '09:00', close: '18:00' },
-        saturday: { open: '09:00', close: '14:00' },
-        sunday: { closed: true }
-      },
-      slot_config: tenant.slot_config || {
-        slot_granularity: 15,
-        allow_same_day_booking: true,
-        max_advance_booking_days: 30
-      },
-      services: (tenant.services || []).map(service => ({
-        ...service,
-        price: service.price_cents ? (service.price_cents / 100) : 0,
-        duration_minutes: service.duration_min || 30
-      })),
-      faqs: tenant.faqs || [],
-      calendar_config: tenant.calendar_config
-    };
-
-    return res.status(200).json({ success: true, data: normalizedTenant });
-  } catch (error) {
-    console.error('Error fetching client:', error);
-    return res.status(500).json({ error: 'Failed to fetch client', message: error.message });
-  }
-}
-
-// PUT /admin/clients/:id/business-hours - Actualizar horarios de negocio
-async function handleAdminUpdateBusinessHours(req, res, clientId) {
-  try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Supabase credentials not configured' });
-    }
-
-    // Parse request body
-    let body = '';
-    if (req.body) {
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-    } else {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      body = Buffer.concat(chunks).toString();
-    }
-
-    const businessHoursData = JSON.parse(body);
-    
-    // Validar estructura de horarios de negocio
-    const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    for (const day of validDays) {
-      if (businessHoursData[day]) {
-        const dayData = businessHoursData[day];
-        if (!dayData.closed && (!dayData.open || !dayData.close)) {
-          return res.status(400).json({ 
-            error: `Invalid business hours for ${day}. Must have 'open' and 'close' times or 'closed: true'` 
-          });
-        }
-      }
-    }
-
-    // Actualizar horarios de negocio en base de datos
-    const response = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
-      method: 'PATCH',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
-        business_hours: businessHoursData,
-        updated_at: new Date().toISOString()
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to update business hours: ${errorText}`);
-    }
-
-    const tenant = await response.json();
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Business hours updated successfully',
-      data: tenant[0] 
-    });
-  } catch (error) {
-    console.error('Error updating business hours:', error);
-    return res.status(500).json({ error: 'Failed to update business hours', message: error.message });
-  }
-}
-
-// POST /admin/clients/:id/faqs - Crear nueva FAQ para tenant
-async function handleAdminCreateFAQ(req, res, clientId) {
-  try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Supabase credentials not configured' });
-    }
-
-    // Parse request body
-    let body = '';
-    if (req.body) {
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-    } else {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      body = Buffer.concat(chunks).toString();
-    }
-
-    const faqData = JSON.parse(body);
-    
-    // Validaciones básicas
-    if (!faqData.question || !faqData.answer) {
-      return res.status(400).json({ error: 'Question and answer are required' });
-    }
-
-    // Verificar que el tenant existe
-    const tenantCheck = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
-      method: 'GET',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!tenantCheck.ok) {
-      throw new Error('Error checking tenant');
-    }
-
-    const tenants = await tenantCheck.json();
-    if (tenants.length === 0) {
-      return res.status(404).json({ error: 'Tenant not found' });
-    }
-
-    // Crear FAQ en base de datos
-    const faqResponse = await fetch(`${supabaseUrl}/rest/v1/faqs`, {
-      method: 'POST',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
-        tenant_id: clientId,
-        question: faqData.question,
-        answer: faqData.answer,
-        keywords: faqData.keywords || [],
-        category: faqData.category || 'general',
-        priority: faqData.priority || 0,
-        is_active: faqData.is_active !== false, // Por defecto true
-        created_at: new Date().toISOString()
-      })
-    });
-
-    if (!faqResponse.ok) {
-      const errorText = await faqResponse.text();
-      throw new Error(`Failed to create FAQ: ${errorText}`);
-    }
-
-    const faq = await faqResponse.json();
-    return res.status(201).json({ 
-      success: true, 
-      message: 'FAQ created successfully',
-      data: faq[0] 
-    });
-  } catch (error) {
-    console.error('Error creating FAQ:', error);
-    return res.status(500).json({ error: 'Failed to create FAQ', message: error.message });
-  }
-}
-
-// POST /admin/clients/:id/services - Crear nuevo servicio para tenant
-async function handleAdminCreateService(req, res, clientId) {
-  try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Supabase credentials not configured' });
-    }
-
-    // Parse request body
-    let body = '';
-    if (req.body) {
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-    } else {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      body = Buffer.concat(chunks).toString();
-    }
-
-    const serviceData = JSON.parse(body);
-    
-    // Validaciones básicas
-    if (!serviceData.name) {
-      return res.status(400).json({ error: 'Service name is required' });
-    }
-
-    // Verificar que el tenant existe
-    const tenantCheck = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
-      method: 'GET',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!tenantCheck.ok) {
-      throw new Error('Error checking tenant');
-    }
-
-    const tenants = await tenantCheck.json();
-    if (tenants.length === 0) {
-      return res.status(404).json({ error: 'Tenant not found' });
-    }
-
-    // Crear servicio en base de datos
-    const serviceResponse = await fetch(`${supabaseUrl}/rest/v1/services`, {
-      method: 'POST',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
-        tenant_id: clientId,
-        name: serviceData.name,
-        description: serviceData.description || `Servicio de ${serviceData.name}`,
-        price_cents: serviceData.price ? Math.round(serviceData.price * 100) : 0,
-        duration_min: serviceData.duration_minutes || serviceData.duration || 30,
-        buffer_min: serviceData.buffer_min || 0,
-        custom_slot_duration: serviceData.custom_slot_duration || null,
-        slot_granularity_min: serviceData.slot_granularity_min || 15,
-        is_active: serviceData.is_active !== false, // Por defecto true
-        settings: serviceData.settings || {},
-        created_at: new Date().toISOString()
-      })
-    });
-
-    if (!serviceResponse.ok) {
-      const errorText = await serviceResponse.text();
-      throw new Error(`Failed to create service: ${errorText}`);
-    }
-
-    const service = await serviceResponse.json();
-    return res.status(201).json({ 
-      success: true, 
-      message: 'Service created successfully',
-      data: service[0] 
-    });
-  } catch (error) {
-    console.error('Error creating service:', error);
-    return res.status(500).json({ error: 'Failed to create service', message: error.message });
   }
 }

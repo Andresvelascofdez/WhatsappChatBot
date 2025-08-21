@@ -337,20 +337,8 @@ module.exports = async function handler(req, res) {
                     <div class="stat-label">Total Clientes</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">${tenants.filter(t => t.active).length}</div>
+                    <div class="stat-number">${tenants.filter(t => t.active !== false).length}</div>
                     <div class="stat-label">Clientes Activos</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">${tenants.filter(t => t.calendar_config?.access_token).length}</div>
-                    <div class="stat-label">Con Calendario</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">${tenants.reduce((sum, t) => sum + (t.services?.length || 0), 0)}</div>
-                    <div class="stat-label">Total Servicios</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">${tenants.reduce((sum, t) => sum + (t.faqs?.length || 0), 0)}</div>
-                    <div class="stat-label">Total FAQs</div>
                 </div>
             </div>
 
@@ -366,15 +354,13 @@ module.exports = async function handler(req, res) {
             <div class="clients-grid" id="clientsGrid">
                 ${tenants.map(tenant => {
                     const hasCalendar = tenant.calendar_config?.access_token;
-                    const servicesCount = tenant.services?.length || 0;
-                    const faqsCount = tenant.faqs?.length || 0;
                     
                     return `
                     <div class="client-card" data-search="${tenant.name?.toLowerCase()} ${tenant.email?.toLowerCase()} ${tenant.phone?.toLowerCase()}">
                         <div class="client-header">
                             <div class="client-title">${tenant.name || 'Sin nombre'}</div>
-                            <div class="client-status ${tenant.active ? 'status-active' : 'status-inactive'}">
-                                ${tenant.active ? '✅ Activo' : '❌ Inactivo'}
+                            <div class="client-status ${tenant.active !== false ? 'status-active' : 'status-inactive'}">
+                                ${tenant.active !== false ? '✅ Activo' : '❌ Inactivo'}
                             </div>
                         </div>
                         
@@ -403,26 +389,14 @@ module.exports = async function handler(req, res) {
                             </div>
                         </div>
 
-                        <div class="client-stats">
-                            <div class="mini-stat">
-                                <div class="mini-stat-number">${servicesCount}</div>
-                                <div class="mini-stat-label">Servicios</div>
-                            </div>
-                            <div class="mini-stat">
-                                <div class="mini-stat-number">${faqsCount}</div>
-                                <div class="mini-stat-label">FAQs</div>
-                            </div>
-                            <div class="mini-stat">
-                                <div class="mini-stat-number">${tenant.slot_config?.slot_granularity || 15}</div>
-                                <div class="mini-stat-label">Min/Slot</div>
-                            </div>
-                        </div>
-
                         <div class="client-actions">
                             <button onclick="viewClient('${tenant.id}')" class="btn btn-primary btn-sm">👁️ Ver</button>
                             <button onclick="editClient('${tenant.id}')" class="btn btn-warning btn-sm">✏️ Editar</button>
-                            <button onclick="toggleStatus('${tenant.id}', ${!tenant.active})" class="btn ${tenant.active ? 'btn-danger' : 'btn-success'} btn-sm">
-                                ${tenant.active ? '⏸️ Desactivar' : '▶️ Activar'}
+                            <button onclick="toggleStatus('${tenant.id}', ${tenant.active === false})" class="btn ${tenant.active !== false ? 'btn-danger' : 'btn-success'} btn-sm">
+                                ${tenant.active !== false ? '⏸️ Desactivar' : '▶️ Activar'}
+                            </button>
+                            <button onclick="deleteClient('${tenant.id}', '${tenant.name}')" class="btn btn-danger btn-sm" style="margin-top: 5px;">
+                                🗑️ Borrar Todo
                             </button>
                         </div>
                     </div>
@@ -483,6 +457,47 @@ module.exports = async function handler(req, res) {
                     alert('Error conectando con el servidor');
                     console.error(error);
                 });
+            }
+        }
+
+        function deleteClient(clientId, clientName) {
+            const confirmation = prompt(\`🚨 ADVERTENCIA: Esta acción eliminará TODOS los datos del cliente "\${clientName}"\n\nEsto incluye:\n- Información del cliente\n- Todos sus servicios\n- Todas sus FAQs\n- Todas las citas\n- Todos los customers/clientes\n- Configuración de calendario\n\nEsta acción NO se puede deshacer.\n\nPara confirmar, escribe exactamente: BORRAR TODO\`);
+            
+            if (confirmation === 'BORRAR TODO') {
+                const finalConfirm = confirm(\`¿Estás absolutamente seguro de que deseas borrar TODOS los datos de "\${clientName}"?\`);
+                
+                if (finalConfirm) {
+                    // Mostrar loading
+                    const originalText = event.target.textContent;
+                    event.target.textContent = '🔄 Borrando...';
+                    event.target.disabled = true;
+                    
+                    fetch(\`/admin/clients/\${clientId}/delete-all\`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert(\`✅ Cliente "\${clientName}" y todos sus datos han sido eliminados correctamente.\`);
+                            location.reload();
+                        } else {
+                            alert('❌ Error: ' + data.message);
+                            event.target.textContent = originalText;
+                            event.target.disabled = false;
+                        }
+                    })
+                    .catch(error => {
+                        alert('❌ Error conectando con el servidor');
+                        console.error(error);
+                        event.target.textContent = originalText;
+                        event.target.disabled = false;
+                    });
+                }
+            } else if (confirmation !== null) {
+                alert('Texto de confirmación incorrecto. Operación cancelada.');
             }
         }
 

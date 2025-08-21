@@ -819,6 +819,89 @@ No estoy seguro de cómo ayudarte con eso. Aquí tienes las opciones disponibles
   }
 }
 
+// ==================== WHATSAPP MESSAGING ====================
+
+// Función para enviar mensaje de WhatsApp
+async function sendWhatsAppMessage(to, message, tenantConfig = null) {
+  try {
+    // Limpiar variables de entorno eliminando caracteres de salto de línea
+    const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+    const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+    
+    // Usar número del tenant si está disponible, sino usar fallback hardcoded
+    let fromPhoneNumber;
+    if (tenantConfig?.phone_number) {
+      fromPhoneNumber = `whatsapp:+${tenantConfig.phone_number}`;
+    } else {
+      fromPhoneNumber = 'whatsapp:+14155238886'; // Fallback para desarrollo/testing
+    }
+    
+    console.log('Twilio credentials check:', {
+      accountSid: accountSid ? `${accountSid.substring(0, 8)}...` : 'MISSING',
+      authToken: authToken ? `${authToken.substring(0, 8)}...` : 'MISSING',
+      fromNumber: fromPhoneNumber,
+      tenant: tenantConfig?.business_name || 'Default'
+    });
+    
+    if (!accountSid || !authToken) {
+      console.error('Twilio credentials not configured');
+      return { success: false, error: 'Twilio credentials missing' };
+    }
+    
+    // Construir URL de la API de Twilio
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+    
+    // Asegurar formato correcto para From y To
+    const fromNumber = fromPhoneNumber.startsWith('whatsapp:') ? fromPhoneNumber : `whatsapp:${fromPhoneNumber}`;
+    const toNumber = to.startsWith('whatsapp:') ? to : `whatsapp:+${to}`;
+    
+    // Preparar datos del mensaje
+    const body = new URLSearchParams({
+      From: fromNumber,
+      To: toNumber,
+      Body: message
+    });
+    
+    // Crear header de autenticación
+    const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    
+    console.log(`Sending message from ${fromNumber} to ${toNumber} via Twilio`);
+    
+    // Enviar mensaje usando fetch
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString()
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok) {
+      console.log('Message sent successfully:', result.sid);
+      return {
+        success: true,
+        message_id: result.sid,
+        to,
+        status: result.status
+      };
+    } else {
+      console.error('Twilio API error:', result);
+      return { 
+        success: false, 
+        error: result.message || 'Failed to send message',
+        code: result.code
+      };
+    }
+    
+  } catch (error) {
+    console.error('Error sending WhatsApp message:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // ==================== UTILITY FUNCTIONS ====================
 
 // Función para determinar el año correcto basado en el mes solicitado

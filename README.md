@@ -11,6 +11,7 @@
 
 | Component | Status | Functionality |
 |-----------|--------|---------------|
+| 🔐 **Authentication System** | ✅ **SECURE** | Admin login with bcrypt, session management |
 | 🎨 **Complete Admin Panel** | ✅ **WORKING** | Full client management with modern interface |
 | 👥 **Client Management** | ✅ **COMPLETE** | Add, edit, view, activate/deactivate clients |
 | 🕒 **Work Schedules** | ✅ **ADVANCED** | Daily configuration, split shifts, closed days |
@@ -27,6 +28,13 @@
 > 💡 **99% Production Ready!** Professional system with all core functionalities implemented and tested. Only external dependencies (Twilio account status) pending for 100% completion.
 
 ## 🎯 **Key Features**
+
+### 🔐 **Secure Authentication System**
+- 🔑 **Admin Login**: Secure access to administration panel
+- 🛡️ **Bcrypt Encryption**: Password hashing with salt rounds 12
+- 🍪 **Session Management**: HTTP-only cookies with 24-hour expiration
+- 🔒 **Route Protection**: All admin endpoints require authentication
+- 🗄️ **Database Security**: Row Level Security (RLS) policies
 
 ### 🎨 **Professional Administration Panel**
 - 🏠 **Main Dashboard**: Overview with real-time statistics
@@ -101,10 +109,41 @@ Spa Valencia: +34 963 987 654
 
 ## 🚀 **System Access**
 
+### 🔐 **Authentication System**
+- **Secure Login**: `/admin/login` - Admin authentication required
+- **Session Management**: 24-hour secure sessions with HTTP-only cookies
+- **Database**: Admin users stored in `admin_users` table with bcrypt encryption
+- **Access Control**: All admin routes protected with authentication middleware
+
+#### 🔧 **Setting Up Admin Access**
+```sql
+-- 1. Execute database setup in Supabase SQL Editor:
+\i database/create_admin_login.sql
+
+-- 2. Create admin user manually in Supabase:
+INSERT INTO admin_users (username, password_hash) 
+VALUES ('your_username', '$2a$12$your_bcrypt_hash_here');
+
+-- 3. Generate bcrypt hash for your password:
+-- Option A: Use online tool: https://bcrypt.online/
+-- Option B: Use Node.js:
+const bcrypt = require('bcryptjs');
+console.log(bcrypt.hashSync('your_password', 12));
+```
+
+#### 🛡️ **Security Features**
+- ✅ **Bcrypt Encryption**: All passwords hashed with salt rounds 12
+- ✅ **Session Tokens**: Secure random tokens with expiration
+- ✅ **HTTP-Only Cookies**: Protection against XSS attacks
+- ✅ **Row Level Security**: Database-level access control
+- ✅ **Auto-Cleanup**: Expired sessions automatically removed
+
 ### 🎨 **Administration Panel**
-- **Main URL**: `/admin` - Main dashboard
+- **Login URL**: `/admin/login` - Authentication page
+- **Main Dashboard**: `/admin` - Main dashboard (requires login)
 - **Client Management**: `/admin/manage-clients` - Client list and management
 - **Add Client**: `/admin/add-client` - New client registration
+- **Logout**: `/admin/logout` - End session securely
 
 ### 🔧 **APIs and Monitoring**
 - **API Health**: `/health` - System health check
@@ -151,11 +190,27 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 
 ### 3. **Setup Database**
 ```sql
--- 1. Execute in Supabase SQL Editor:
+-- 1. Execute main database setup in Supabase SQL Editor:
 \i database/update_tables_for_calendar.sql
 
--- 2. Setup first business (change phone number):
+-- 2. Setup authentication system:
+\i database/create_admin_login.sql
+
+-- 3. Create admin user (replace with your credentials):
+INSERT INTO admin_users (username, password_hash) 
+VALUES ('your_admin_username', '$2a$12$your_bcrypt_hash_here');
+
+-- 4. Setup first business (change phone number):
 \i database/setup_default_tenant.sql
+```
+
+**📝 To generate bcrypt hash for your password:**
+```bash
+# Option A: Use Node.js
+node -e "console.log(require('bcryptjs').hashSync('your_password', 12))"
+
+# Option B: Use online tool
+# Visit: https://bcrypt.online/
 ```
 
 ### 4. **Deploy**

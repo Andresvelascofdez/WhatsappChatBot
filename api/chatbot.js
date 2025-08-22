@@ -580,6 +580,9 @@ function findRelevantFAQ(messageText, faqs) {
 // Función para generar respuesta basada en el mensaje
 async function generateResponse(messageText, phoneNumber, contactName, tenantConfig) {
   try {
+    console.log(`🎯 GENERATE_RESPONSE: Procesando mensaje: "${messageText}"`);
+    console.log(`🎯 GENERATE_RESPONSE: MessageText toLowerCase: "${messageText.toLowerCase()}"`);
+    
     const businessName = tenantConfig.business_name || tenantConfig.name || 'nuestra empresa';
     const services = tenantConfig.services || [];
     const faqs = tenantConfig.faqs || [];
@@ -720,9 +723,12 @@ Para verificar disponibilidad en una fecha específica, escribe *reservar*.`;
     }
     
     // Consultar huecos disponibles para un día
-    const huecosMatch = messageText.match(/huecos?\s+d[ií]a\s+(\d{1,2})\/(\d{1,2})/);
+    console.log(`🔍 REGEX_TEST: Probando regex para huecos en: "${messageText}"`);
+    const huecosMatch = messageText.match(/huecos?\s+(d[ií]a|día)\s+(\d{1,2})\/(\d{1,2})/);
+    console.log(`🔍 REGEX_TEST: Resultado del match:`, huecosMatch);
+    
     if (huecosMatch) {
-      const [, day, month] = huecosMatch;
+      const [, , day, month] = huecosMatch; // Saltamos el segundo capture group
       console.log(`🔍 HUECOS: Usuario solicitó huecos para día ${day}/${month}`);
       console.log(`🔍 HUECOS: Tenant config:`, {
         tenantId: tenantConfig.id,

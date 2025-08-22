@@ -30,6 +30,7 @@ module.exports = async function handler(req, res) {
                 created_at,
                 updated_at,
                 active,
+                is_active,
                 slot_config,
                 calendar_config,
                 services (*),
@@ -42,6 +43,13 @@ module.exports = async function handler(req, res) {
         }
 
         const tenants = response.data || [];
+        
+        // Normalizar el campo active para compatibilidad con diferentes esquemas
+        const normalizedTenants = tenants.map(tenant => ({
+            ...tenant,
+            active: tenant.active !== undefined ? tenant.active : 
+                   (tenant.is_active !== undefined ? tenant.is_active : true)
+        }));
 
         const html = `
 <!DOCTYPE html>
@@ -333,17 +341,17 @@ module.exports = async function handler(req, res) {
             <!-- Estadísticas -->
             <div class="stats">
                 <div class="stat-card">
-                    <div class="stat-number">${tenants.length}</div>
+                    <div class="stat-number">${normalizedTenants.length}</div>
                     <div class="stat-label">Total Clientes</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">${tenants.filter(t => t.active !== false).length}</div>
+                    <div class="stat-number">${normalizedTenants.filter(t => t.active !== false).length}</div>
                     <div class="stat-label">Clientes Activos</div>
                 </div>
             </div>
 
             <!-- Lista de Clientes -->
-            ${tenants.length === 0 ? `
+            ${normalizedTenants.length === 0 ? `
             <div class="empty-state">
                 <h3>📋 No hay clientes registrados</h3>
                 <p>Comienza agregando tu primer cliente para gestionar las reservas por WhatsApp</p>
@@ -352,7 +360,7 @@ module.exports = async function handler(req, res) {
             </div>
             ` : `
             <div class="clients-grid" id="clientsGrid">
-                ${tenants.map(tenant => {
+                ${normalizedTenants.map(tenant => {
                     const hasCalendar = tenant.calendar_config?.access_token;
                     
                     return `

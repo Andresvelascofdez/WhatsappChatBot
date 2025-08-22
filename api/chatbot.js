@@ -1786,7 +1786,7 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
     
     const slots = [];
     
-    console.log(`🔧 Generating slots with serviceDuration: ${serviceDuration} min, granularity: ${slotGranularity} min`);
+    console.log(`🔧 Generando slots con serviceDuration: ${serviceDuration} min, granularity: ${slotGranularity} min`);
     
     // Generar slots para cada período de tiempo
     for (const timeSlot of timeSlots) {
@@ -2123,116 +2123,70 @@ async function confirmAppointment(appointmentId, customerData) {
   }
 }
 
-// Función para borrar completamente un cliente y todos sus datos
-async function handleAdminDeleteClient(req, res, clientId) {
+// ==================== ADMIN FUNCTIONS ====================
+
+// Función para obtener estadísticas del sistema
+async function handleAdminStats(req, res) {
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
     
     if (!supabaseUrl || !supabaseKey) {
       return res.status(500).json({
-        error: 'Database not configured',
-        message: 'Supabase credentials missing'
+        error: 'Supabase credentials not configured'
       });
     }
-    
-    console.log(`🗑️ Iniciando borrado completo del cliente: ${clientId}`);
-    
-    // 1. Borrar todas las citas del cliente
-    const deleteAppointmentsResponse = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${clientId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!deleteAppointmentsResponse.ok) {
-      console.error('Error deleting appointments:', await deleteAppointmentsResponse.text());
-    } else {
-      console.log('✅ Citas eliminadas');
-    }
-    
-    // 2. Borrar todos los customers del cliente
-    const deleteCustomersResponse = await fetch(`${supabaseUrl}/rest/v1/customers?tenant_id=eq.${clientId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!deleteCustomersResponse.ok) {
-      console.error('Error deleting customers:', await deleteCustomersResponse.text());
-    } else {
-      console.log('✅ Customers eliminados');
-    }
-    
-    // 3. Borrar todos los servicios del cliente
-    const deleteServicesResponse = await fetch(`${supabaseUrl}/rest/v1/services?tenant_id=eq.${clientId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!deleteServicesResponse.ok) {
-      console.error('Error deleting services:', await deleteServicesResponse.text());
-    } else {
-      console.log('✅ Servicios eliminados');
-    }
-    
-    // 4. Borrar todas las FAQs del cliente
-    const deleteFaqsResponse = await fetch(`${supabaseUrl}/rest/v1/faqs?tenant_id=eq.${clientId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!deleteFaqsResponse.ok) {
-      console.error('Error deleting FAQs:', await deleteFaqsResponse.text());
-    } else {
-      console.log('✅ FAQs eliminadas');
-    }
-    
-    // 5. Finalmente, borrar el tenant
-    const deleteTenantResponse = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!deleteTenantResponse.ok) {
-      throw new Error('Error deleting tenant: ' + await deleteTenantResponse.text());
-    }
-    
-    console.log('✅ Cliente eliminado completamente');
-    
+
+    // Consultar datos de la base de datos
+    const [tenantsResponse, servicesResponse, appointmentsResponse] = await Promise.all([
+      fetch(`${supabaseUrl}/rest/v1/tenants?select=id,name,active,calendar_config`, {
+        method: 'GET',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        }
+      }),
+      fetch(`${supabaseUrl}/rest/v1/services?select=id,tenant_id,is_active`, {
+        method: 'GET',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        }
+      }),
+      fetch(`${supabaseUrl}/rest/v1/appointments?select=id,tenant_id,status`, {
+        method: 'GET',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        }
+      })
+    ]);
+
+    const tenants = tenantsResponse.ok ? await tenantsResponse.json() : [];
+    const services = servicesResponse.ok ? await servicesResponse.json() : [];
+    const appointments = appointmentsResponse.ok ? await appointmentsResponse.json() : [];
+
+    // Calcular estadísticas corregidas
+    const stats = {
+      totalTenants: tenants.length,
+      activeTenants: tenants.filter(t => t.active !== false).length, // Clientes activos corregido
+      totalServices: services.filter(s => s.is_active !== false).length,
+      totalAppointments: appointments.length,
+      confirmedAppointments: appointments.filter(a => a.status === 'confirmed').length,
+      tenantsWithCalendar: tenants.filter(t => t.calendar_config?.access_token).length
+    };
+
     return res.status(200).json({
       success: true,
-      message: 'Cliente y todos sus datos eliminados correctamente',
-      deleted: {
-        tenant: true,
-        appointments: true,
-        customers: true,
-        services: true,
-        faqs: true
-      },
+      stats,
       timestamp: new Date().toISOString()
     });
-    
+
   } catch (error) {
-    console.error('Error deleting client completely:', error);
+    console.error('Error getting admin stats:', error);
     return res.status(500).json({
       error: 'Internal Server Error',
       message: error.message,
@@ -2240,3 +2194,5 @@ async function handleAdminDeleteClient(req, res, clientId) {
     });
   }
 }
+
+// ...existing code...

@@ -20,8 +20,8 @@ module.exports = async function handler(req, res) {
     try {
         // Obtener estadísticas del sistema
         const [tenantsResult, servicesResult, appointmentsResult] = await Promise.all([
-            supabase.from('tenants').select('id, business_name, phone_number, calendar_config'),
-            supabase.from('services').select('tenant_id'),
+            supabase.from('tenants').select('id, business_name, phone_number, active, is_active, calendar_config'),
+            supabase.from('services').select('tenant_id, is_active'),
             supabase.from('appointments').select('tenant_id, status')
         ]);
 
@@ -29,10 +29,18 @@ module.exports = async function handler(req, res) {
         const services = servicesResult.data || [];
         const appointments = appointmentsResult.data || [];
 
-        // Calcular estadísticas
+        // Normalizar y calcular estadísticas
+        const activeTenants = tenants.filter(t => {
+            // Usar active si existe, sino usar is_active, si no existe ninguno asumir true
+            const isActive = t.active !== undefined ? t.active : 
+                           (t.is_active !== undefined ? t.is_active : true);
+            return isActive !== false;
+        });
+
         const stats = {
             totalTenants: tenants.length,
-            totalServices: services.length,
+            activeTenants: activeTenants.length, // Campo corregido
+            totalServices: services.filter(s => s.is_active !== false).length,
             totalAppointments: appointments.length,
             tenantsWithCalendar: tenants.filter(t => t.calendar_config?.access_token).length,
             confirmedAppointments: appointments.filter(a => a.status === 'confirmed').length
@@ -277,26 +285,8 @@ module.exports = async function handler(req, res) {
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="emoji">🏢</div>
-                <div class="stat-number" style="color: #667eea;">${stats.totalTenants}</div>
+                <div class="stat-number" style="color: #667eea;">${stats.activeTenants}</div>
                 <div class="stat-label">Clientes Activos</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="emoji">🎯</div>
-                <div class="stat-number" style="color: #28a745;">${stats.totalServices}</div>
-                <div class="stat-label">Servicios Configurados</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="emoji">📅</div>
-                <div class="stat-number" style="color: #dc3545;">${stats.totalAppointments}</div>
-                <div class="stat-label">Citas Totales</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="emoji">🔗</div>
-                <div class="stat-number" style="color: #ffc107;">${stats.tenantsWithCalendar}</div>
-                <div class="stat-label">Google Calendar Conectados</div>
             </div>
         </div>
 

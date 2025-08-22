@@ -1431,22 +1431,36 @@ async function processForm(req, res) {
     }
 }
 
-// Función para enviar email con enlace de autorización usando Web3Forms
+// Función para enviar email con enlace de autorización usando Nodemailer + Gmail SMTP
 async function sendAuthorizationEmail(toEmail, businessName, authUrl) {
     try {
         console.log(`📧 Enviando email de autorización a: ${toEmail}`);
         
-        // Verificar que tengamos la clave de Web3Forms
-        const accessKey = process.env.WEB3FORMS_ACCESS_KEY;
+        // Verificar credenciales de Gmail
+        const gmailUser = process.env.GMAIL_USER;
+        const gmailPassword = process.env.GMAIL_APP_PASSWORD;
         
-        if (!accessKey) {
-            console.log('⚠️ WEB3FORMS_ACCESS_KEY no configurada, simulando envío');
+        if (!gmailUser || !gmailPassword) {
+            console.log('⚠️ Credenciales de Gmail no configuradas');
             console.log(`📧 EMAIL SIMULADO PARA: ${toEmail}`);
             console.log(`📧 ENLACE DE AUTORIZACIÓN: ${authUrl}`);
+            console.log(`📧 SOLUCIÓN: Configura GMAIL_USER y GMAIL_APP_PASSWORD en variables de entorno`);
             return true;
         }
 
-        // Crear el contenido HTML del email según el formato de Web3Forms
+        // Importar nodemailer dinámicamente
+        const nodemailer = require('nodemailer');
+        
+        // Configurar transporter con Gmail SMTP
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: gmailUser,
+                pass: gmailPassword
+            }
+        });
+
+        // Crear contenido HTML del email
         const emailHTML = `
 <!DOCTYPE html>
 <html>
@@ -1454,7 +1468,7 @@ async function sendAuthorizationEmail(toEmail, businessName, authUrl) {
     <meta charset="UTF-8">
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
-        .container { max-width: 600px; margin: 0 auto; background: white; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; }
         .header { background: linear-gradient(45deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; }
         .content { padding: 30px; }
         .auth-button { 
@@ -1507,9 +1521,10 @@ async function sendAuthorizationEmail(toEmail, businessName, authUrl) {
             <ul>
                 <li>🏢 Negocio: ${businessName}</li>
                 <li>📧 Email: ${toEmail}</li>
+                <li>📅 Enviado: ${new Date().toLocaleDateString('es-ES')}</li>
             </ul>
             
-            <p>Si tienes alguna pregunta, contáctanos.</p>
+            <p>Si tienes alguna pregunta, responde a este email.</p>
         </div>
         
         <div class="footer">
@@ -1520,41 +1535,38 @@ async function sendAuthorizationEmail(toEmail, businessName, authUrl) {
 </body>
 </html>`;
 
-        // Enviar usando Web3Forms con el formato correcto según las instrucciones
-        const formData = {
-            access_key: accessKey,
-            name: 'WhatsApp Bot System',
-            email: toEmail,
+        // Configurar opciones del email
+        const mailOptions = {
+            from: `"WhatsApp Bot System" <${gmailUser}>`,
+            to: toEmail,
             subject: `🔐 Autorización Google Calendar - ${businessName}`,
-            message: emailHTML,
-            from_name: 'WhatsApp Bot System'
+            html: emailHTML
         };
 
-        console.log('📧 Enviando email vía Web3Forms...');
+        console.log('📧 Enviando email vía Gmail SMTP...');
+        console.log(`   De: ${gmailUser}`);
+        console.log(`   Para: ${toEmail}`);
         
-        const response = await fetch('https://api.web3forms.com/submit', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(formData)
-        });
-
-        const result = await response.json();
+        // Enviar email
+        const result = await transporter.sendMail(mailOptions);
         
-        if (response.status === 200) {
-            console.log('✅ Email enviado exitosamente vía Web3Forms');
-            console.log(`   Para: ${toEmail}`);
-            console.log(`   Asunto: ${formData.subject}`);
-            return true;
-        } else {
-            console.error('❌ Error enviando email:', result);
-            throw new Error(`Error enviando email: ${result.message || response.status}`);
-        }
+        console.log('✅ Email enviado exitosamente vía Gmail SMTP');
+        console.log(`   Message ID: ${result.messageId}`);
+        console.log(`   Para: ${toEmail}`);
+        console.log(`   Asunto: ${mailOptions.subject}`);
+        
+        return true;
         
     } catch (error) {
         console.error('❌ Error en sendAuthorizationEmail:', error);
+        
+        // Información específica sobre errores comunes
+        if (error.code === 'EAUTH') {
+            console.log('💡 Error de autenticación: Verifica GMAIL_APP_PASSWORD');
+        } else if (error.code === 'ENOTFOUND') {
+            console.log('💡 Error de red: Verifica conexión a internet');
+        }
+        
         // No hacer throw del error para que no rompa el flujo principal
         console.log('⚠️ Continuando sin envío de email...');
         return false;

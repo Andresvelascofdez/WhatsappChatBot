@@ -126,29 +126,29 @@ module.exports = async (req, res) => {
 
       case urlPath === '/admin' && method === 'GET':
       case urlPath === '/admin/' && method === 'GET':
-        return res.status(200).json({
-          message: 'Admin Panel API',
-          version: '1.0.0',
-          endpoints: [
-            'GET /admin/manage-clients',
-            'GET /admin/client-view',
-            'GET /admin/client-edit',
-            'POST /admin/client-edit',
-            'GET /admin/clients',
-            'POST /admin/clients', 
-            'PUT /admin/clients/:id',
-            'GET /admin/clients/:id',
-            'PUT /admin/clients/:id/business-hours',
-            'POST /admin/clients/:id/faqs',
-            'POST /admin/clients/:id/services'
-          ],
-          timestamp: new Date().toISOString()
-        });
+        // Redirect to dedicated admin handler with authentication
+        const adminHandler = require('./admin/index.js');
+        return await adminHandler(req, res);
+        
+      case urlPath === '/admin/login' && (method === 'GET' || method === 'POST'):
+        // Redirect to login handler
+        const loginHandler = require('./admin/login.js');
+        return await loginHandler(req, res);
+        
+      case urlPath === '/admin/logout' && method === 'GET':
+        // Redirect to logout handler
+        const logoutHandler = require('./admin/logout.js');
+        return await logoutHandler(req, res);
         
       case urlPath === '/admin/manage-clients' && method === 'GET':
         // Redirect to dedicated manage clients handler
         const manageClientsHandler = require('./admin/manage-clients.js');
         return await manageClientsHandler(req, res);
+        
+      case urlPath === '/admin/add-client' && (method === 'GET' || method === 'POST'):
+        // Redirect to dedicated add client handler
+        const addClientHandler = require('./admin/add-client.js');
+        return await addClientHandler(req, res);
         
       case urlPath === '/admin/client-view' && method === 'GET':
         // Redirect to dedicated client view handler
@@ -161,30 +161,39 @@ module.exports = async (req, res) => {
         return await clientEditHandler(req, res);
         
       case urlPath === '/admin/clients' && method === 'GET':
-        return await handleAdminGetClients(req, res);
+        // Redirect to manage clients (same functionality)
+        const clientsListHandler = require('./admin/manage-clients.js');
+        return await clientsListHandler(req, res);
         
       case urlPath === '/admin/clients' && method === 'POST':
-        return await handleAdminCreateClient(req, res);
+        // Redirect to add client handler for POST requests
+        const createClientHandler = require('./admin/add-client.js');
+        return await createClientHandler(req, res);
         
       case urlPath.startsWith('/admin/clients/') && method === 'PUT':
-        const clientId = urlPath.split('/')[3];
-        return await handleAdminUpdateClient(req, res, clientId);
+        // Redirect to client edit handler for updates
+        const updateClientHandler = require('./admin/client-edit.js');
+        return await updateClientHandler(req, res);
         
       case urlPath.startsWith('/admin/clients/') && method === 'GET':
-        const getClientId = urlPath.split('/')[3];
-        return await handleAdminGetClient(req, res, getClientId);
+        // Redirect to client view handler
+        const viewClientHandler = require('./admin/client-view.js');
+        return await viewClientHandler(req, res);
         
       case urlPath.startsWith('/admin/clients/') && urlPath.endsWith('/business-hours') && method === 'PUT':
-        const businessHoursClientId = urlPath.split('/')[3];
-        return await handleAdminUpdateBusinessHours(req, res, businessHoursClientId);
+        // TODO: Implement business hours update or redirect to client-edit
+        const businessHoursHandler = require('./admin/client-edit.js');
+        return await businessHoursHandler(req, res);
         
       case urlPath.startsWith('/admin/clients/') && urlPath.endsWith('/faqs') && method === 'POST':
-        const faqClientId = urlPath.split('/')[3];
-        return await handleAdminCreateFAQ(req, res, faqClientId);
+        // TODO: Implement FAQ creation or redirect to client-edit
+        const faqHandler = require('./admin/client-edit.js');
+        return await faqHandler(req, res);
         
       case urlPath.startsWith('/admin/clients/') && urlPath.endsWith('/services') && method === 'POST':
-        const serviceClientId = urlPath.split('/')[3];
-        return await handleAdminCreateService(req, res, serviceClientId);
+        // TODO: Implement service creation or redirect to client-edit
+        const serviceHandler = require('./admin/client-edit.js');
+        return await serviceHandler(req, res);
         
       case urlPath === '/admin/stats' && method === 'GET':
         return await handleAdminStats(req, res);

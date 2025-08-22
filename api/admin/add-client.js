@@ -1367,7 +1367,7 @@ async function processForm(req, res) {
             price_cents: Math.round(service.price * 100), // Schema usa 'price_cents' como entero
             duration_min: service.duration_minutes,       // Schema usa 'duration_min'
             buffer_min: 0,                               // Campo que existe en schema
-            is_active: true                              // Campo que existe en schema
+            active: true                                 // Campo que existe en schema
         }));
 
         const { error: servicesError } = await supabase
@@ -1386,7 +1386,7 @@ async function processForm(req, res) {
                 answer: faq.answer,
                 keywords: faq.keywords,
                 category: faq.category,
-                is_active: true
+                active: true
             }));
 
             const { error: faqsError } = await supabase

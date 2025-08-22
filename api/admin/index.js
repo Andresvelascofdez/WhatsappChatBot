@@ -20,8 +20,8 @@ module.exports = async function handler(req, res) {
     try {
         // Obtener estadísticas del sistema
         const [tenantsResult, servicesResult, appointmentsResult] = await Promise.all([
-            supabase.from('tenants').select('id, business_name, phone_number, active, is_active, calendar_config'),
-            supabase.from('services').select('tenant_id, is_active'),
+            supabase.from('tenants').select('id, business_name, phone_number, active, calendar_config'),
+            supabase.from('services').select('tenant_id'),
             supabase.from('appointments').select('tenant_id, status')
         ]);
 
@@ -29,18 +29,13 @@ module.exports = async function handler(req, res) {
         const services = servicesResult.data || [];
         const appointments = appointmentsResult.data || [];
 
-        // Normalizar y calcular estadísticas
-        const activeTenants = tenants.filter(t => {
-            // Usar active si existe, sino usar is_active, si no existe ninguno asumir true
-            const isActive = t.active !== undefined ? t.active : 
-                           (t.is_active !== undefined ? t.is_active : true);
-            return isActive !== false;
-        });
+        // Calcular estadísticas usando la columna 'active'
+        const activeTenants = tenants.filter(t => t.active === true);
 
         const stats = {
             totalTenants: tenants.length,
-            activeTenants: activeTenants.length, // Campo corregido
-            totalServices: services.filter(s => s.is_active !== false).length,
+            activeTenants: activeTenants.length,
+            totalServices: services.length,
             totalAppointments: appointments.length,
             tenantsWithCalendar: tenants.filter(t => t.calendar_config?.access_token).length,
             confirmedAppointments: appointments.filter(a => a.status === 'confirmed').length

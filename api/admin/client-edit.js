@@ -44,12 +44,12 @@ async function handleGetEdit(req, res) {
                 .from('services')
                 .select('*')
                 .eq('tenant_id', clientId)
-                .eq('is_active', true),
+                .eq('active', true),
             supabase
                 .from('faqs')
                 .select('*')
                 .eq('tenant_id', clientId)
-                .eq('is_active', true)
+                .eq('active', true)
         ]);
 
         if (tenantResponse.error) {
@@ -1269,7 +1269,7 @@ async function handlePostEdit(req, res) {
                 price_cents: Math.round(service.price * 100),
                 duration_min: service.duration_minutes,
                 buffer_min: 0,
-                is_active: true
+                active: true
             }));
 
             const { error: servicesError } = await supabase
@@ -1296,7 +1296,7 @@ async function handlePostEdit(req, res) {
                 answer: faq.answer,
                 keywords: faq.keywords,
                 category: faq.category,
-                is_active: true
+                active: true
             }));
 
             const { error: faqsError } = await supabase

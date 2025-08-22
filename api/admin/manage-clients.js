@@ -30,7 +30,6 @@ module.exports = async function handler(req, res) {
                 created_at,
                 updated_at,
                 active,
-                is_active,
                 slot_config,
                 calendar_config,
                 services (*),
@@ -44,11 +43,10 @@ module.exports = async function handler(req, res) {
 
         const tenants = response.data || [];
         
-        // Normalizar el campo active para compatibilidad con diferentes esquemas
+        // Asegurar que todos los tenants tengan el campo active definido
         const normalizedTenants = tenants.map(tenant => ({
             ...tenant,
-            active: tenant.active !== undefined ? tenant.active : 
-                   (tenant.is_active !== undefined ? tenant.is_active : true)
+            active: tenant.active !== undefined ? tenant.active : true
         }));
 
         const html = `

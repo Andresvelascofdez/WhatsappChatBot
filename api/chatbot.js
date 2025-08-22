@@ -2147,7 +2147,7 @@ async function handleAdminStats(req, res) {
           'Content-Type': 'application/json'
         }
       }),
-      fetch(`${supabaseUrl}/rest/v1/services?select=id,tenant_id,is_active`, {
+      fetch(`${supabaseUrl}/rest/v1/services?select=id,tenant_id,active`, {
         method: 'GET',
         headers: {
           'apikey': supabaseKey,
@@ -2173,7 +2173,7 @@ async function handleAdminStats(req, res) {
     const stats = {
       totalTenants: tenants.length,
       activeTenants: tenants.filter(t => t.active !== false).length, // Clientes activos corregido
-      totalServices: services.filter(s => s.is_active !== false).length,
+      totalServices: services.filter(s => s.active !== false).length,
       totalAppointments: appointments.length,
       confirmedAppointments: appointments.filter(a => a.status === 'confirmed').length,
       tenantsWithCalendar: tenants.filter(t => t.calendar_config?.access_token).length

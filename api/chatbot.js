@@ -660,69 +660,7 @@ Ejemplo: 25/08
       }
     }
     
-    // Procesar fecha (formato DD/MM sin año)
-    const dateMatch = messageText.match(/(\d{1,2})\/(\d{1,2})$/);
-    if (dateMatch) {
-      const [, day, month] = dateMatch;
-      const targetYear = determineTargetYear(parseInt(month));
-      const requestedDate = `${targetYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-      
-      // Aquí necesitaríamos mantener estado de la conversación
-      // Por simplicidad, vamos a pedir que usen el comando completo
-      return `📅 *Fecha recibida: ${day}/${month}/${targetYear}*
-
-Para continuar, usa el comando completo:
-*reservar [servicio] ${day}/${month} [hora]*
-
-Ejemplo: reservar corte ${day}/${month} 10:00
-
-⏰ Horarios disponibles: ${getBusinessHoursText(tenantConfig.business_hours)}
-
-💡 Para ver slots disponibles: *huecos dia ${day}/${month}*`;
-    }
-    
-    // Confirmar cita
-    if (messageText === 'confirmar') {
-      return await processAppointmentConfirmation(phoneNumber, contactName, tenantConfig);
-    }
-    
-    // Cancelar cita
-    if (messageText === 'cancelar') {
-      return await processAppointmentCancellation(phoneNumber, tenantConfig);
-    }
-    
-    // Ver servicios
-    if (messageText.includes('servicios') || messageText.includes('precios') || messageText.includes('precio')) {
-      let servicesText = `💇‍♀️ *Nuestros Servicios*\n\n`;
-      
-      services.forEach(service => {
-        const duration = service.duration_minutes ? ` (${service.duration_minutes} min)` : '';
-        const price = service.price ? `€${service.price}` : 'Consultar precio';
-        servicesText += `✂️ *${service.name}* - ${price}${duration}\n`;
-        if (service.description) {
-          servicesText += `   ${service.description}\n`;
-        }
-        servicesText += '\n';
-      });
-      
-      servicesText += '¿Te interesa algún servicio? Escribe *reservar* para hacer tu cita.';
-      return servicesText;
-    }
-    
-    // Ver horarios
-    if (messageText.includes('horarios') || messageText.includes('horario') || messageText.includes('disponibles')) {
-      const hoursText = getBusinessHoursText(tenantConfig.business_hours);
-      
-      return `🕒 *Horarios Disponibles*
-
-${hoursText}
-
-⏰ *Turnos cada 30 minutos*
-
-Para verificar disponibilidad en una fecha específica, escribe *reservar*.`;
-    }
-    
-    // Consultar huecos disponibles para un día
+    // Consultar huecos disponibles para un día - DEBE IR ANTES QUE EL BLOQUE DE FECHA
     console.log(`🔍 REGEX_TEST: Probando regex para huecos en: "${messageText}"`);
     const huecosMatch = messageText.match(/huecos?\s+(d[ií]a|día|dia)\s+(\d{1,2})\/(\d{1,2})/);
     console.log(`🔍 REGEX_TEST: Resultado del match:`, huecosMatch);
@@ -747,6 +685,27 @@ Para verificar disponibilidad en una fecha específica, escribe *reservar*.`;
       });
       
       return result;
+    }
+    
+    // Procesar fecha (formato DD/MM sin año) - AHORA VA DESPUÉS DE HUECOS
+    const dateMatch = messageText.match(/(\d{1,2})\/(\d{1,2})$/);
+    if (dateMatch) {
+      const [, day, month] = dateMatch;
+      const targetYear = determineTargetYear(parseInt(month));
+      const requestedDate = `${targetYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      
+      // Aquí necesitaríamos mantener estado de la conversación
+      // Por simplicidad, vamos a pedir que usen el comando completo
+      return `📅 *Fecha recibida: ${day}/${month}/${targetYear}*
+
+Para continuar, usa el comando completo:
+*reservar [servicio] ${day}/${month} [hora]*
+
+Ejemplo: reservar corte ${day}/${month} 10:00
+
+⏰ Horarios disponibles: ${getBusinessHoursText(tenantConfig.business_hours)}
+
+💡 Para ver slots disponibles: *huecos dia ${day}/${month}*`;
     }
 
     // Ayuda

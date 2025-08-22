@@ -282,10 +282,9 @@ module.exports = async (req, res) => {
         </form>
         
         <div class="credentials-info">
-            <strong>💡 Default Credentials:</strong><br>
-            Username: <strong>admin</strong><br>
-            Password: <strong>admin123</strong><br>
-            <em>⚠️ Change these in production!</em>
+            <strong>� Secure Access:</strong><br>
+            Contact administrator for login credentials<br>
+            <em>🛡️ Authentication required for admin access</em>
         </div>
     </div>
 

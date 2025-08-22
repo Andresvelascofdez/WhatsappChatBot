@@ -22,11 +22,16 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
     user_agent TEXT
 );
 
--- Insertar usuario admin por defecto (username: admin, password: admin123)
--- ⚠️ CAMBIAR LA CONTRASEÑA EN PRODUCCIÓN
-INSERT INTO admin_users (username, password_hash) 
-VALUES ('admin', '$2b$12$LQv3c1yqBwEHvl/YYfN9Fu8/8kZgJGHkZ5L.d8xOLuZjjXBpJeEDm')
-ON CONFLICT (username) DO NOTHING;
+-- Insertar usuario admin por defecto (OPCIONAL - configurar manualmente)
+-- ⚠️ AGREGAR USUARIO MANUALMENTE EN PRODUCCIÓN
+-- Ejemplo para agregar usuario:
+-- INSERT INTO admin_users (username, password_hash) 
+-- VALUES ('tu_usuario', '$2b$12$hash_bcrypt_de_tu_password');
+
+-- Para generar hash de password usa:
+-- https://bcrypt.online/ o ejecuta en Node.js:
+-- const bcrypt = require('bcryptjs');
+-- console.log(bcrypt.hashSync('tu_password', 12));
 
 -- Índices para mejor rendimiento
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_token ON admin_sessions(session_token);

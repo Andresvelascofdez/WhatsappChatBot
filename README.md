@@ -2,10 +2,10 @@
 
 **Intelligent WhatsApp chatbot for appointment booking with complete Google Calendar integration**
 
-[![Deploy Status](https://img.shields.io/badge/Deploy-Vercel-brightgreen)](https://whatsapp-chat-bot-xi.vercel.app/health)
+[![Deploy Status](https://img.shields.io/badge/Deploy-Vercel-brightgreen)](LICENSE)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
-[![System Status](https://img.shields.io/badge/System-99%25%20Ready-brightgreen)](https://whatsapp-chat-bot-xi.vercel.app/admin)
+[![System Status](https://img.shields.io/badge/System-99%25%20Ready-brightgreen)](LICENSE)
 
 ## 🚀 **System Status - 99% PRODUCTION READY!** ✨
 
@@ -18,7 +18,7 @@
 | ❓ **FAQ System** | ✅ **INTELLIGENT** | Automatic responses by keywords |
 | ⚙️ **Slot Configuration** | ✅ **CUSTOMIZABLE** | Duration, max days, same-day bookings |
 | 🔗 **Google OAuth2** | ✅ **AUTOMATED** | Automatic authorization links |
-| ⚡ **API Health** | ✅ **MONITORED** | [/health](https://whatsapp-chat-bot-xi.vercel.app/health) |
+| ⚡ **API Health** | ✅ **MONITORED** | Health check endpoint available |
 | 📱 **WhatsApp Webhook** | ✅ **ACTIVE** | /webhook (Twilio integrated) |
 | 🗄️ **Database** | ✅ **OPTIMIZED** | Supabase PostgreSQL with RLS |
 | � **Email System** | ✅ **FUNCTIONAL** | Nodemailer with Gmail SMTP |
@@ -99,17 +99,17 @@ Spa Valencia: +34 963 987 654
 ```
 **All work independently in the same installation.**
 
-## 🚀 **Live Demo and Access**
+## 🚀 **System Access**
 
 ### 🎨 **Administration Panel**
-- **Main URL**: [https://whatsapp-chat-bot-xi.vercel.app/admin](https://whatsapp-chat-bot-xi.vercel.app/admin)
-- **Client Management**: [/admin/manage-clients](https://whatsapp-chat-bot-xi.vercel.app/admin/manage-clients)
-- **Add Client**: [/admin/add-client](https://whatsapp-chat-bot-xi.vercel.app/admin/add-client)
+- **Main URL**: `/admin` - Main dashboard
+- **Client Management**: `/admin/manage-clients` - Client list and management
+- **Add Client**: `/admin/add-client` - New client registration
 
 ### 🔧 **APIs and Monitoring**
-- **API Health**: [https://whatsapp-chat-bot-xi.vercel.app/health](https://whatsapp-chat-bot-xi.vercel.app/health)
-- **WhatsApp Webhook**: `https://whatsapp-chat-bot-xi.vercel.app/webhook`
-- **Google Authorization**: `/admin/google-auth-callback`
+- **API Health**: `/health` - System health check
+- **WhatsApp Webhook**: `/webhook` - Twilio webhook endpoint
+- **Google Authorization**: `/admin/google-auth-callback` - OAuth2 callback
 
 ### 📱 **Panel Features**
 - ✅ **Dashboard**: Overview with real-time statistics
@@ -171,7 +171,7 @@ vercel --prod
 # 🎯 FULLY FUNCTIONAL AND READY SYSTEM
 
 # 1. 🎨 Open web administration panel
-https://whatsapp-chat-bot-xi.vercel.app/admin
+your-domain.com/admin
 
 # 2. ➕ Click "Add Client"
 # 3. 📝 Complete interactive comprehensive form:
@@ -456,27 +456,27 @@ npm start
 vercel --prod
 
 # API and Admin Panel testing
-curl https://whatsapp-chat-bot-xi.vercel.app/health
-curl https://whatsapp-chat-bot-xi.vercel.app/admin
+curl your-domain.com/health
+curl your-domain.com/admin
 
 # Client management scripts
 npm run client:add      # Add client via CLI
 npm run client:verify   # Verify Google configuration
 ```
 
-### **Deployed System URLs**
+### **System URLs Structure**
 ```bash
 # Administration Panel
-https://whatsapp-chat-bot-xi.vercel.app/admin
-https://whatsapp-chat-bot-xi.vercel.app/admin/manage-clients
-https://whatsapp-chat-bot-xi.vercel.app/admin/add-client
+/admin                        # Main dashboard
+/admin/manage-clients         # Client management
+/admin/add-client            # Add new client
 
 # System APIs
-https://whatsapp-chat-bot-xi.vercel.app/health
-https://whatsapp-chat-bot-xi.vercel.app/webhook
+/health                      # Health check
+/webhook                     # WhatsApp webhook
 
 # Google Authorization (automatic)
-https://whatsapp-chat-bot-xi.vercel.app/admin/google-auth-callback
+/admin/google-auth-callback  # OAuth2 callback
 ```
 
 ## 📚 **Additional Documentation**
@@ -529,7 +529,6 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 - 📧 **Email**: andresvelascofdez@gmail.com
 - 🐛 **Issues**: [GitHub Issues](https://github.com/Andresvelascofdez/WhatsappChatBot/issues)
 - 📖 **Documentation**: See `.md` files in the project
-- 🌐 **Live Demo**: [Admin Panel](https://whatsapp-chat-bot-xi.vercel.app/admin)
 
 ---
 

@@ -2195,4 +2195,105 @@ async function handleAdminStats(req, res) {
   }
 }
 
-// ...existing code...
+// ==================== ADMIN DELETE CLIENT FUNCTION ====================
+
+// Función para eliminar completamente un cliente (tenant) y todos sus datos relacionados
+async function handleAdminDeleteClient(req, res, clientId) {
+  try {
+    console.log(`🗑️ Iniciando eliminación completa del cliente: ${clientId}`);
+
+    // Verificar configuración de Supabase
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured');
+    }
+
+    // 1. Eliminar citas del cliente
+    console.log('🗑️ Eliminando citas...');
+    const deleteAppointmentsResponse = await fetch(`${supabaseUrl}/rest/v1/appointments?tenant_id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!deleteAppointmentsResponse.ok) {
+      console.error('Error eliminando citas:', await deleteAppointmentsResponse.text());
+    } else {
+      console.log('✅ Citas eliminadas');
+    }
+
+    // 2. Eliminar servicios del cliente
+    console.log('🗑️ Eliminando servicios...');
+    const deleteServicesResponse = await fetch(`${supabaseUrl}/rest/v1/services?tenant_id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!deleteServicesResponse.ok) {
+      console.error('Error eliminando servicios:', await deleteServicesResponse.text());
+    } else {
+      console.log('✅ Servicios eliminados');
+    }
+
+    // 3. Eliminar FAQs del cliente
+    console.log('🗑️ Eliminando FAQs...');
+    const deleteFaqsResponse = await fetch(`${supabaseUrl}/rest/v1/faqs?tenant_id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!deleteFaqsResponse.ok) {
+      console.error('Error eliminando FAQs:', await deleteFaqsResponse.text());
+    } else {
+      console.log('✅ FAQs eliminadas');
+    }
+
+    // 4. Finalmente, eliminar el tenant
+    console.log('🗑️ Eliminando tenant...');
+    const deleteTenantResponse = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!deleteTenantResponse.ok) {
+      const errorText = await deleteTenantResponse.text();
+      console.error('Error eliminando tenant:', errorText);
+      throw new Error(`Error eliminando cliente: ${errorText}`);
+    }
+
+    console.log('✅ Cliente eliminado completamente');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cliente eliminado exitosamente',
+      clientId: clientId,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error eliminando cliente:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Error eliminando cliente',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+}

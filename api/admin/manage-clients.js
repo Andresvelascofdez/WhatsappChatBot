@@ -6,13 +6,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('./auth-middleware');
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
 );
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -319,9 +320,19 @@ module.exports = async function handler(req, res) {
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>👥 Gestión de Clientes</h1>
-            <p>Panel de administración - Sistema Multi-Tenant WhatsApp Bot</p>
+        <div class="header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div>
+                <h1>👥 Gestión de Clientes</h1>
+                <p>Panel de administración - Sistema Multi-Tenant WhatsApp Bot</p>
+            </div>
+            <div style="text-align: right;">
+                <a href="/admin" style="background: #667eea; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; margin-right: 10px;">
+                    🏠 Dashboard
+                </a>
+                <a href="/admin/logout" style="background: #ff4757; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem;">
+                    🚪 Logout
+                </a>
+            </div>
         </div>
         
         <div class="content">
@@ -529,4 +540,6 @@ module.exports = async function handler(req, res) {
             message: error.message
         });
     }
-};
+}
+
+module.exports = requireAuth(handler);

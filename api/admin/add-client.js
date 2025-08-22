@@ -6,6 +6,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('./auth-middleware');
 
 // Configuración
 const supabase = createClient(
@@ -1837,7 +1838,7 @@ function showErrorPage(res, errorMessage) {
 }
 
 // Handler principal exportado
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
     // Solo permitir GET (mostrar formulario) y POST (procesar formulario)
     if (req.method === 'GET') {
         return showForm(res);
@@ -1849,3 +1850,5 @@ module.exports = async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' });
 }
+
+module.exports = requireAuth(handler);

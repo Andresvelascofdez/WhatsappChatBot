@@ -7,13 +7,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('./auth-middleware');
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
 );
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
     if (req.method === 'GET') {
         return await handleGetEdit(req, res);
     } else if (req.method === 'POST') {
@@ -1474,3 +1475,5 @@ async function handlePostEdit(req, res) {
         res.status(500).send(errorHtml);
     }
 }
+
+module.exports = requireAuth(handler);

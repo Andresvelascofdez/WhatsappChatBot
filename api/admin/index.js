@@ -6,13 +6,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('./auth-middleware');
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
 );
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -271,9 +272,17 @@ module.exports = async function handler(req, res) {
 <body>
     <div class="container">
         <!-- Header -->
-        <div class="header">
-            <h1>🎛️ Panel de Administración</h1>
-            <p>Sistema Multi-Tenant WhatsApp Bot - Gestión Centralizada</p>
+        <div class="header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div>
+                <h1>🎛️ Panel de Administración</h1>
+                <p>Sistema Multi-Tenant WhatsApp Bot - Gestión Centralizada</p>
+            </div>
+            <div style="text-align: right;">
+                <p style="color: #666; font-size: 0.9rem; margin-bottom: 5px;">👤 Welcome, ${req.user?.username || 'Admin'}</p>
+                <a href="/admin/logout" style="background: #ff4757; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem;">
+                    🚪 Logout
+                </a>
+            </div>
         </div>
 
         <!-- Estadísticas -->
@@ -384,3 +393,5 @@ module.exports = async function handler(req, res) {
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 }
+
+module.exports = requireAuth(handler);

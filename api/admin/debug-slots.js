@@ -6,13 +6,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('./auth-middleware');
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
 );
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
     try {
         // Obtener parámetros de testing
         const { tenantId, serviceId, date } = req.query;
@@ -283,4 +284,6 @@ module.exports = async function handler(req, res) {
             stack: error.stack
         });
     }
-};
+}
+
+module.exports = requireAuth(handler);

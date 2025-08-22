@@ -6,13 +6,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('./auth-middleware');
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
 );
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -380,4 +381,6 @@ module.exports = async function handler(req, res) {
             message: error.message
         });
     }
-};
+}
+
+module.exports = requireAuth(handler);

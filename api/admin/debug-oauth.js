@@ -4,7 +4,9 @@
  * URL: /api/admin/debug-oauth
  */
 
-module.exports = async function handler(req, res) {
+const { requireAuth } = require('./auth-middleware');
+
+async function handler(req, res) {
     const diagnosis = {
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'development',
@@ -113,4 +115,6 @@ module.exports = async function handler(req, res) {
 
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(html);
-};
+}
+
+module.exports = requireAuth(handler);;

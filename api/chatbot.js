@@ -724,7 +724,23 @@ Para verificar disponibilidad en una fecha específica, escribe *reservar*.`;
     if (huecosMatch) {
       const [, day, month] = huecosMatch;
       console.log(`🔍 HUECOS: Usuario solicitó huecos para día ${day}/${month}`);
-      return await processAvailableSlotsQuery(day, month, tenantConfig);
+      console.log(`🔍 HUECOS: Tenant config:`, {
+        tenantId: tenantConfig.id,
+        name: tenantConfig.name,
+        servicesCount: tenantConfig.services?.length || 0,
+        services: tenantConfig.services?.map(s => ({id: s.id, name: s.name})) || []
+      });
+      
+      // Debug: Verificar que processAvailableSlotsQuery se va a ejecutar
+      console.log(`🔧 HUECOS: Llamando a processAvailableSlotsQuery con day=${day}, month=${month}`);
+      
+      const result = await processAvailableSlotsQuery(day, month, tenantConfig);
+      console.log(`📋 HUECOS: Resultado de processAvailableSlotsQuery:`, {
+        resultLength: result?.length || 0,
+        resultPreview: result?.substring(0, 200) || 'No result'
+      });
+      
+      return result;
     }
 
     // Ayuda
@@ -969,13 +985,20 @@ Intenta con una fecha futura.`;
     
     // Generar slots para cada servicio y recopilar todos los horarios únicos
     for (const service of tenantConfig.services) {
-      console.log(`🔧 Procesando servicio: ${service.name} (${service.duration_minutes || 30} min)`);
+      console.log(`🔧 HUECOS: Procesando servicio: ${service.name} (${service.duration_minutes || 30} min)`);
+      console.log(`🔧 HUECOS: Llamando generateAvailableSlots con:`, {
+        tenantId: tenantConfig.id,
+        serviceId: service.id,
+        requestedDate: requestedDate
+      });
+      
       const slotsResult = await generateAvailableSlots(tenantConfig, service.id, requestedDate);
       
-      console.log(`📊 Resultado slots para ${service.name}:`, {
+      console.log(`📊 HUECOS: Resultado slots para ${service.name}:`, {
         success: slotsResult.success,
         slotsCount: slotsResult.slots ? slotsResult.slots.length : 0,
-        error: slotsResult.error
+        error: slotsResult.error,
+        firstSlot: slotsResult.slots?.[0] || null
       });
       
       if (slotsResult.success && slotsResult.slots.length > 0) {
@@ -987,6 +1010,8 @@ Intenta con una fecha futura.`;
         const slotsText = slotsResult.slots.map(slot => slot.displayTime).join(', ');
         response += `   ⏰ ${slotsText}\n\n`;
         
+        console.log(`✅ HUECOS: Agregado ${slotsResult.slots.length} slots para ${service.name}`);
+        
         // Agregar a la lista general de slots
         slotsResult.slots.forEach(slot => {
           if (!allSlots.find(s => s.displayTime === slot.displayTime)) {
@@ -994,7 +1019,8 @@ Intenta con una fecha futura.`;
           }
         });
       } else {
-        console.log(`❌ Sin slots para ${service.name}: ${slotsResult.error || 'Sin motivo específico'}`);
+        console.log(`❌ HUECOS: Sin slots para ${service.name}: ${slotsResult.error || 'Sin motivo específico'}`);
+        console.log(`❌ HUECOS: Detalle del error para ${service.name}:`, slotsResult);
       }
     }
     
@@ -1759,9 +1785,12 @@ async function generateAvailableSlots(tenantConfig, serviceId, requestedDate) {
                          tenantConfig.business_hours?.[dayOfWeek] || 
                          { open: '09:00', close: '18:00', closed: false };
                          
-    console.log(`📅 Business hours for ${dayOfWeek}:`, businessHours);
+    console.log(`📅 SLOTS: Business hours for ${dayOfWeek}:`, businessHours);
+    console.log(`📅 SLOTS: Tenant business_hours config:`, tenantConfig.business_hours);
+    console.log(`📅 SLOTS: Slot config business_hours:`, slotConfig.business_hours);
                          
     if (businessHours.closed === true) {
+      console.log(`❌ SLOTS: Negocio cerrado el ${dayOfWeek}`);
       return { success: false, error: 'Negocio cerrado este día' };
     }
     

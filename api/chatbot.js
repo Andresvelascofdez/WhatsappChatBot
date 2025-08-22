@@ -724,7 +724,7 @@ Para verificar disponibilidad en una fecha específica, escribe *reservar*.`;
     
     // Consultar huecos disponibles para un día
     console.log(`🔍 REGEX_TEST: Probando regex para huecos en: "${messageText}"`);
-    const huecosMatch = messageText.match(/huecos?\s+(d[ií]a|día)\s+(\d{1,2})\/(\d{1,2})/);
+    const huecosMatch = messageText.match(/huecos?\s+(d[ií]a|día|dia)\s+(\d{1,2})\/(\d{1,2})/);
     console.log(`🔍 REGEX_TEST: Resultado del match:`, huecosMatch);
     
     if (huecosMatch) {

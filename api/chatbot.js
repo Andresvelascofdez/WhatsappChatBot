@@ -723,6 +723,7 @@ Para verificar disponibilidad en una fecha específica, escribe *reservar*.`;
     const huecosMatch = messageText.match(/huecos?\s+d[ií]a\s+(\d{1,2})\/(\d{1,2})/);
     if (huecosMatch) {
       const [, day, month] = huecosMatch;
+      console.log(`🔍 HUECOS: Usuario solicitó huecos para día ${day}/${month}`);
       return await processAvailableSlotsQuery(day, month, tenantConfig);
     }
 
@@ -952,50 +953,72 @@ Intenta con una fecha futura.`;
     const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const dayName = dayNames[requestedDateObj.getDay()];
     
-    let response = `📅 *Huecos disponibles para ${dayName} ${day}/${month}/${targetYear}*\n\n`;
+    console.log(`📅 Día de la semana: ${dayName} para fecha ${requestedDate}`);
+    
+    let response = `📅 *Huecos libres para ${dayName} ${day}/${month}/${targetYear}*\n\n`;
     
     // Verificar si hay servicios configurados
     if (!tenantConfig.services || tenantConfig.services.length === 0) {
       return response + `❌ No hay servicios configurados.`;
     }
     
-    let hasAvailableSlots = false;
+    console.log(`🔧 Generando slots para ${tenantConfig.services.length} servicios`);
     
-    // Generar slots para cada servicio
+    let hasAvailableSlots = false;
+    let allSlots = [];
+    
+    // Generar slots para cada servicio y recopilar todos los horarios únicos
     for (const service of tenantConfig.services) {
+      console.log(`🔧 Procesando servicio: ${service.name} (${service.duration_minutes || 30} min)`);
       const slotsResult = await generateAvailableSlots(tenantConfig, service.id, requestedDate);
+      
+      console.log(`📊 Resultado slots para ${service.name}:`, {
+        success: slotsResult.success,
+        slotsCount: slotsResult.slots ? slotsResult.slots.length : 0,
+        error: slotsResult.error
+      });
       
       if (slotsResult.success && slotsResult.slots.length > 0) {
         hasAvailableSlots = true;
-        response += `💇‍♀️ *${service.name}* (${service.duration_minutes || 30} min, €${service.price})\n`;
         
-        // Agrupar slots por bloques de tiempo para mejor visualización
-        const slotsText = slotsResult.slots.map((slot, index) => {
-          return `   ${slot.displayTime}`;
-        }).join(', ');
+        // Mostrar slots específicos para este servicio
+        response += `💇‍♀️ *${service.name}* (${service.duration_minutes || 30} min)\n`;
         
-        response += `   ${slotsText}\n\n`;
+        const slotsText = slotsResult.slots.map(slot => slot.displayTime).join(', ');
+        response += `   ⏰ ${slotsText}\n\n`;
+        
+        // Agregar a la lista general de slots
+        slotsResult.slots.forEach(slot => {
+          if (!allSlots.find(s => s.displayTime === slot.displayTime)) {
+            allSlots.push(slot);
+          }
+        });
       } else {
-        response += `💇‍♀️ *${service.name}*: Sin huecos disponibles\n\n`;
+        console.log(`❌ Sin slots para ${service.name}: ${slotsResult.error || 'Sin motivo específico'}`);
       }
     }
     
+    // Respuesta final según disponibilidad
     if (!hasAvailableSlots) {
-      response += `❌ *No hay huecos disponibles para esta fecha*\n\n`;
-      response += `💡 Intenta con otra fecha o consulta nuestros horarios: *horarios*`;
+      response += `❌ No hay huecos libres para el ${day}/${month}.\n\n`;
+      response += `� Puedes consultar otros días escribiendo "huecos dia X/Y" (ejemplo: "huecos dia 26/08")`;
     } else {
-      response += `✅ *Para reservar un hueco:*\n`;
-      response += `Escribe: *reservar [servicio] ${day}/${month} [hora]*\n`;
-      response += `Ejemplo: *reservar corte ${day}/${month} ${tenantConfig.services[0] ? '10:00' : ''}*`;
+      response += `Para reservar, escribe: *reservar SERVICIO dia ${day}/${month} hora HORA*\n`;
+      response += `Ejemplo: "reservar corte dia ${day}/${month} hora 10:00"`;
     }
+    
+    console.log(`📋 Respuesta final de huecos:`, {
+      date: `${day}/${month}`,
+      hasSlots: hasAvailableSlots,
+      totalUniqueSlots: allSlots.length,
+      servicesProcessed: tenantConfig.services.length
+    });
     
     return response;
     
   } catch (error) {
-    console.error('Error processing available slots query:', error);
-    return `❌ *Error consultando huecos*
-
-Intenta de nuevo en unos momentos.`;
+    console.error('❌ Error en processAvailableSlotsQuery:', error);
+    return 'Lo siento, hubo un error al consultar los huecos disponibles. Por favor, inténtalo de nuevo.';
   }
 }
 
